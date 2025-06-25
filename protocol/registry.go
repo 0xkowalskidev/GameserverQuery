@@ -30,7 +30,6 @@ type ServerInfo struct {
 	Ping        time.Duration     `json:"ping"`
 	Online      bool              `json:"online"`
 	Extra       map[string]string `json:"extra,omitempty"`
-	LastQueried time.Time         `json:"last_queried"`
 }
 
 // PlayerInfo represents player count and list information

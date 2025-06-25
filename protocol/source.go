@@ -15,23 +15,23 @@ type SourceProtocol struct{}
 func init() {
 	registry.Register(&SourceProtocol{})
 	
-	// Register game aliases (full game names, no punctuation/spaces, lowercase)
-	registry.RegisterAlias("counterstrike2", "source")
-	registry.RegisterAlias("counterstrike", "source") // CS:GO is "Counter-Strike"
-	registry.RegisterAlias("countersource", "source")
-	registry.RegisterAlias("garrysmod", "source")
-	registry.RegisterAlias("teamfortress2", "source")
-	registry.RegisterAlias("left4dead", "source")
-	registry.RegisterAlias("left4dead2", "source")
-	registry.RegisterAlias("halflife", "source")
+	// Register game aliases (slugified game names)
+	registry.RegisterAlias("counter-strike-2", "source")
+	registry.RegisterAlias("counter-strike", "source") // CS:GO is "Counter-Strike"
+	registry.RegisterAlias("counter-source", "source")
+	registry.RegisterAlias("garrys-mod", "source")
+	registry.RegisterAlias("team-fortress-2", "source")
+	registry.RegisterAlias("left-4-dead", "source")
+	registry.RegisterAlias("left-4-dead-2", "source")
+	registry.RegisterAlias("half-life", "source")
 	registry.RegisterAlias("rust", "source")
-	registry.RegisterAlias("arksurvivalevolved", "source")
+	registry.RegisterAlias("ark-survival-evolved", "source")
 	registry.RegisterAlias("insurgency", "source")
-	registry.RegisterAlias("dayofdefeat", "source")
-	registry.RegisterAlias("projectzomboid", "source")
+	registry.RegisterAlias("day-of-defeat", "source")
+	registry.RegisterAlias("project-zomboid", "source")
 	registry.RegisterAlias("valheim", "source")
 	registry.RegisterAlias("satisfactory", "source")
-	registry.RegisterAlias("7daystodie", "source")
+	registry.RegisterAlias("7-days-to-die", "source")
 }
 
 func (s *SourceProtocol) Name() string {
@@ -420,54 +420,54 @@ func (s *SourceProtocol) detectGameType(gameDesc string, appID uint16) string {
 	// Note: Some newer games have App IDs that exceed uint16 range
 	switch appID {
 	case 730:
-		return "csgo"
+		return "counter-strike"
 	case 240: 
-		return "css"
+		return "counter-source"
 	case 4000:
-		return "gmod"
+		return "garrys-mod"
 	case 440:
-		return "tf2"
+		return "team-fortress-2"
 	case 550:
-		return "left4dead2"
+		return "left-4-dead-2"
 	case 500:
-		return "left4dead"
+		return "left-4-dead"
 	case 320:
-		return "halflife"
+		return "half-life"
 	case 300:
-		return "dods"
+		return "day-of-defeat-source"
 	// Note: Rust (252490), Ark (346110), Insurgency (222880), Project Zomboid (108600)
 	// have App IDs that exceed uint16 range - handled by string matching below
 	}
 	
 	// Fallback to string matching
 	if strings.Contains(gameLower, "counter-strike 2") {
-		return "counterstrike2"
+		return "counter-strike-2"
 	} else if strings.Contains(gameLower, "counter-strike: global offensive") {
-		return "counterstrike"
+		return "counter-strike"
 	} else if strings.Contains(gameLower, "counter-strike") {
-		return "counterstrike"
+		return "counter-strike"
 	} else if strings.Contains(gameLower, "garrysmod") || strings.Contains(gameLower, "garry") {
-		return "garrysmod"
+		return "garrys-mod"
 	} else if strings.Contains(gameLower, "team fortress") {
-		return "teamfortress2"
+		return "team-fortress-2"
 	} else if strings.Contains(gameLower, "left 4 dead 2") {
-		return "left4dead2"
+		return "left-4-dead-2"
 	} else if strings.Contains(gameLower, "left 4 dead") {
-		return "left4dead"
+		return "left-4-dead"
 	} else if strings.Contains(gameLower, "rust") {
 		return "rust"
 	} else if strings.Contains(gameLower, "ark") {
-		return "arksurvivalevolved"
+		return "ark-survival-evolved"
 	} else if strings.Contains(gameLower, "insurgency") {
 		return "insurgency"
 	} else if strings.Contains(gameLower, "day of defeat") {
-		return "dayofdefeat"
+		return "day-of-defeat"
 	} else if strings.Contains(gameLower, "project zomboid") {
-		return "projectzomboid"
+		return "project-zomboid"
 	} else if strings.Contains(gameLower, "satisfactory") {
 		return "satisfactory"
 	} else if strings.Contains(gameLower, "7 days to die") {
-		return "7daystodie"
+		return "7-days-to-die"
 	}
 	
 	return "source"

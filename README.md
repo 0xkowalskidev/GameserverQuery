@@ -30,9 +30,9 @@ gameserverquery localhost:25565
 gameserverquery -game minecraft play.hypixel.net
 
 # Query specific games
-gameserverquery -game counterstrike2 192.168.1.100:27015
+gameserverquery -game counter-strike-2 192.168.1.100:27015
 gameserverquery -game rust 192.168.1.100:28015
-gameserverquery -game arksurvivalevolved 192.168.1.100:27015
+gameserverquery -game ark-survival-evolved 192.168.1.100:27015
 
 # Query with player list
 gameserverquery -game minecraft -players play.hypixel.net
@@ -64,9 +64,9 @@ Run `gameserverquery -list` to see all supported games. Popular ones include:
 - `factorio` - Factorio UDP Query protocol
 
 **Source/Steam Query Games:**
-- `counterstrike2` `counterstrike` `countersource` `garrysmod` `teamfortress2`
-- `rust` `arksurvivalevolved` `left4dead` `left4dead2` `halflife`
-- `insurgency` `dayofdefeat` `projectzomboid` `valheim` `satisfactory` `7daystodie`
+- `counter-strike-2` `counter-strike` `counter-source` `garrys-mod` `team-fortress-2`
+- `rust` `ark-survival-evolved` `left-4-dead` `left-4-dead-2` `half-life`
+- `insurgency` `day-of-defeat` `project-zomboid` `valheim` `satisfactory` `7-days-to-die`
 
 ## Library Usage
 
@@ -85,7 +85,7 @@ info, err := query.Query(ctx, "minecraft", "play.hypixel.net:25565")
 info, err := query.AutoDetect(ctx, "localhost:25565")
 
 // With player list
-info, err := query.Query(ctx, "counterstrike2", "server.com:27015", query.WithPlayers())
+info, err := query.Query(ctx, "counter-strike-2", "server.com:27015", query.WithPlayers())
 
 // Query other games
 info, err := query.Query(ctx, "rust", "rust-server.com:28015")
@@ -93,11 +93,37 @@ info, err := query.Query(ctx, "factorio", "factorio.example.com:34197")
 info, err := query.Query(ctx, "terraria", "terraria.example.com:7777")
 ```
 
-## API
+## Server Info Structure
 
-- `query.Query(ctx, game, addr, ...opts)` - Query specific game
-- `query.AutoDetect(ctx, addr, ...opts)` - Auto-detect game type  
-- `query.WithPlayers()` - Include player list option
+The query functions return a `ServerInfo` struct with the following fields:
+
+```go
+type ServerInfo struct {
+    Name        string            `json:"name"`         // Server name
+    Game        string            `json:"game"`         // Game type identifier 
+    Version     string            `json:"version"`      // Game/server version
+    Address     string            `json:"address"`      // Server address
+    Port        int               `json:"port"`         // Server port
+    Players     PlayerInfo        `json:"players"`      // Player information
+    Map         string            `json:"map,omitempty"`         // Current map (optional)
+    MOTD        string            `json:"motd,omitempty"`        // Message of the day (optional)
+    Ping        time.Duration     `json:"ping"`         // Query response time
+    Online      bool              `json:"online"`       // Server online status
+    Extra       map[string]string `json:"extra,omitempty"`       // Additional game-specific data
+}
+
+type PlayerInfo struct {
+    Current int      `json:"current"`           // Current player count
+    Max     int      `json:"max"`              // Maximum player count
+    List    []Player `json:"list,omitempty"`   // List of individual players (optional)
+}
+
+type Player struct {
+    Name     string        `json:"name"`                    // Player name
+    Score    int           `json:"score,omitempty"`         // Player score (optional)
+    Duration time.Duration `json:"duration,omitempty"`      // Time played (optional)
+}
+```
 
 ## License
 

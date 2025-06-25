@@ -11,7 +11,7 @@ func TestSupportedGames(t *testing.T) {
 	games := SupportedGames()
 
 	expectedProtocols := []string{"minecraft", "source", "terraria", "factorio"}
-	expectedAliases := []string{"counterstrike2", "counterstrike", "garrysmod", "teamfortress2", "rust", "arksurvivalevolved", "valheim", "7daystodie"}
+	expectedAliases := []string{"counter-strike-2", "counter-strike", "garrys-mod", "team-fortress-2", "rust", "ark-survival-evolved", "valheim", "7-days-to-die"}
 	
 	if len(games) < len(expectedProtocols)+len(expectedAliases) {
 		t.Errorf("Expected at least %d games, got %d", len(expectedProtocols)+len(expectedAliases), len(games))
@@ -46,11 +46,11 @@ func TestDefaultPort(t *testing.T) {
 		{"source", 27015},
 		{"terraria", 7777},
 		{"factorio", 34197},
-		{"counterstrike2", 27015},    // Alias should work
-		{"counterstrike", 27015},     // Alias should work
-		{"garrysmod", 27015},         // Alias should work
+		{"counter-strike-2", 27015},    // Alias should work
+		{"counter-strike", 27015},     // Alias should work
+		{"garrys-mod", 27015},         // Alias should work
 		{"valheim", 27015},           // Alias should work
-		{"7daystodie", 27015},        // Alias should work
+		{"7-days-to-die", 27015},        // Alias should work
 		{"invalid", 0},
 	}
 
@@ -70,14 +70,14 @@ func TestGameAliases(t *testing.T) {
 		alias    string
 		expected string
 	}{
-		{"counterstrike2", "source"},
-		{"counterstrike", "source"},
-		{"garrysmod", "source"},
-		{"teamfortress2", "source"},
-		{"countersource", "source"},
+		{"counter-strike-2", "source"},
+		{"counter-strike", "source"},
+		{"garrys-mod", "source"},
+		{"team-fortress-2", "source"},
+		{"counter-source", "source"},
 		{"rust", "source"},
 		{"valheim", "source"},
-		{"7daystodie", "source"},
+		{"7-days-to-die", "source"},
 	}
 	
 	for _, test := range aliasTests {
