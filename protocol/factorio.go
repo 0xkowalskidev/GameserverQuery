@@ -52,7 +52,7 @@ func (f *FactorioProtocol) Query(ctx context.Context, addr string, opts *Options
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
-	ping := time.Since(start)
+	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	if n < 6 {
 		return &ServerInfo{Online: false}, fmt.Errorf("response too short")

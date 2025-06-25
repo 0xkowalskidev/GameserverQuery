@@ -141,7 +141,7 @@ func setServerInfoFields(info *protocol.ServerInfo, host string, port int, game 
 	info.Address = host
 	info.Port = port
 	info.Game = game
-	info.Ping = time.Since(start)
+	info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
 }
 
 // DefaultOptions returns default query options

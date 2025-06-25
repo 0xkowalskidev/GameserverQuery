@@ -70,7 +70,7 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
-	ping := time.Since(start)
+	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	if n < 5 {
 		return &ServerInfo{Online: false}, fmt.Errorf("response too short")
@@ -144,7 +144,7 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 		return &ServerInfo{Online: false}, fmt.Errorf("read challenge response failed: %w", err)
 	}
 
-	ping := time.Since(start)
+	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	if n < 5 || response[4] != 0x49 {
 		return &ServerInfo{Online: false}, fmt.Errorf("invalid challenge response")

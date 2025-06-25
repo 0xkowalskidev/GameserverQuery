@@ -2,8 +2,6 @@ package protocol
 
 import (
 	"context"
-	"encoding/json"
-	"math"
 	"time"
 )
 
@@ -29,40 +27,11 @@ type ServerInfo struct {
 	Players     PlayerInfo        `json:"players"`
 	Map         string            `json:"map,omitempty"`
 	MOTD        string            `json:"motd,omitempty"`
-	Ping        time.Duration     `json:"-"`
+	Ping        int               `json:"ping"`
 	Online      bool              `json:"online"`
 	Extra       map[string]string `json:"extra,omitempty"`
 }
 
-// MarshalJSON custom marshaling to format ping as milliseconds
-func (s *ServerInfo) MarshalJSON() ([]byte, error) {
-	type Alias ServerInfo
-	return json.Marshal(&struct {
-		Name        string            `json:"name"`
-		Game        string            `json:"game"`
-		Version     string            `json:"version"`
-		Address     string            `json:"address"`
-		Port        int               `json:"port"`
-		Players     PlayerInfo        `json:"players"`
-		Map         string            `json:"map,omitempty"`
-		MOTD        string            `json:"motd,omitempty"`
-		Ping        int               `json:"ping"`
-		Online      bool              `json:"online"`
-		Extra       map[string]string `json:"extra,omitempty"`
-	}{
-		Name:    s.Name,
-		Game:    s.Game,
-		Version: s.Version,
-		Address: s.Address,
-		Port:    s.Port,
-		Players: s.Players,
-		Map:     s.Map,
-		MOTD:    s.MOTD,
-		Ping:    int(math.Round(float64(s.Ping.Nanoseconds()) / 1e6)),
-		Online:  s.Online,
-		Extra:   s.Extra,
-	})
-}
 
 // PlayerInfo represents player count and list information
 type PlayerInfo struct {

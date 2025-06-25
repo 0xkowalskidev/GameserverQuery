@@ -47,7 +47,7 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 
 	// Try TShock REST API first (more reliable)
 	if info, err := t.queryTShockAPI(ctx, addr, opts.Timeout); err == nil {
-		info.Ping = time.Since(start)
+		info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
 		return info, nil
 	}
 
@@ -69,7 +69,7 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
-	ping := time.Since(start)
+	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	// Parse whatever response we get
 	info, err := t.parseResponse(response[:n])

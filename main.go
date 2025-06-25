@@ -146,7 +146,7 @@ func outputText(info *protocol.ServerInfo) error {
 	printIfNotEmpty("Map", info.Map)
 	printIfNotEmpty("MOTD", info.MOTD)
 	if info.Ping > 0 {
-		fmt.Printf("Ping: %.0f\n", float64(info.Ping.Nanoseconds())/1e6)
+		fmt.Printf("Ping: %d\n", info.Ping)
 	}
 	fmt.Printf("Online: %t\n", info.Online)
 
