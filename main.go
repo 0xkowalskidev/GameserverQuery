@@ -134,7 +134,7 @@ func outputText(info *protocol.ServerInfo) error {
 	}
 
 	// Basic server info
-	fmt.Printf("Server: %s\n", info.Name)
+	printIfNotEmpty("Server", info.Name)
 	fmt.Printf("Game: %s\n", info.Game)
 	if info.Version != "" {
 		fmt.Printf("Version: %s\n", info.Version)
@@ -144,6 +144,7 @@ func outputText(info *protocol.ServerInfo) error {
 	
 	// Optional fields
 	printIfNotEmpty("Map", info.Map)
+	printIfNotEmpty("MOTD", info.MOTD)
 	if info.Ping > 0 {
 		fmt.Printf("Ping: %v\n", info.Ping)
 	}

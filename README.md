@@ -2,13 +2,14 @@
 
 ## It does what it says on the tin.
 
-This is CLI tool and Go library for querying game servers across multiple games including Minecraft, Source engine games, Terraria, etc
+This is a CLI tool and Go library for querying game servers across multiple games including Minecraft, Source engine games, Terraria, etc
 
 ## Features
 
 - **Multi-game support**: Minecraft, CS2, CS:GO, Garry's Mod, Terraria, Valheim, etc.
 - **Auto-detection**: Detects game type automatically
-- **Player lists**: Get player information 
+- **Player lists**: Get player information
+- **Server details**: Names, versions, maps, MOTDs where available
 - **JSON/text output**: Multiple output formats
 - **Zero dependencies**: Pure Go, no external deps
 

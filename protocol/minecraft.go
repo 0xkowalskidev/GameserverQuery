@@ -94,8 +94,11 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 		return &ServerInfo{Online: false}, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
+	motd := m.cleanMotd(status.Description)
+	
 	info := &ServerInfo{
-		Name:    m.cleanMotd(status.Description),
+		Name:    "", // Minecraft protocol doesn't provide a separate server name
+		MOTD:    motd,
 		Version: status.Version.Name,
 		Online:  true,
 		Players: PlayerInfo{
