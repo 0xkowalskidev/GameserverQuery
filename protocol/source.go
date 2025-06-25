@@ -15,15 +15,23 @@ type SourceProtocol struct{}
 func init() {
 	registry.Register(&SourceProtocol{})
 	
-	// Register clean game names for specific Source games
-	registry.RegisterAlias("cs2", "source")
-	registry.RegisterAlias("csgo", "source")
-	registry.RegisterAlias("cssource", "source")
-	registry.RegisterAlias("gmod", "source")
-	registry.RegisterAlias("tf2", "source")
+	// Register game aliases (full game names, no punctuation/spaces, lowercase)
+	registry.RegisterAlias("counterstrike2", "source")
+	registry.RegisterAlias("counterstrike", "source") // CS:GO is "Counter-Strike"
+	registry.RegisterAlias("countersource", "source")
+	registry.RegisterAlias("garrysmod", "source")
+	registry.RegisterAlias("teamfortress2", "source")
 	registry.RegisterAlias("left4dead", "source")
 	registry.RegisterAlias("left4dead2", "source")
 	registry.RegisterAlias("halflife", "source")
+	registry.RegisterAlias("rust", "source")
+	registry.RegisterAlias("arksurvivalevolved", "source")
+	registry.RegisterAlias("insurgency", "source")
+	registry.RegisterAlias("dayofdefeat", "source")
+	registry.RegisterAlias("projectzomboid", "source")
+	registry.RegisterAlias("valheim", "source")
+	registry.RegisterAlias("satisfactory", "source")
+	registry.RegisterAlias("7daystodie", "source")
 }
 
 func (s *SourceProtocol) Name() string {
@@ -100,16 +108,8 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 		Ping: ping,
 	}
 
-	// Determine specific game based on game description
-	if strings.Contains(strings.ToLower(info.Game), "counter-strike 2") {
-		result.Game = "cs2"
-	} else if strings.Contains(strings.ToLower(info.Game), "counter-strike") {
-		result.Game = "csgo"
-	} else if strings.Contains(strings.ToLower(info.Game), "garrysmod") || strings.Contains(strings.ToLower(info.Game), "garry") {
-		result.Game = "gmod"
-	} else {
-		result.Game = "source"
-	}
+	// Determine specific game based on game description and App ID
+	result.Game = s.detectGameType(info.Game, info.AppID)
 
 	// Query players if requested
 	if opts.Players {
@@ -169,15 +169,7 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 	}
 
 	// Determine specific game
-	if strings.Contains(strings.ToLower(info.Game), "counter-strike 2") {
-		result.Game = "cs2"
-	} else if strings.Contains(strings.ToLower(info.Game), "counter-strike") {
-		result.Game = "csgo"
-	} else if strings.Contains(strings.ToLower(info.Game), "garrysmod") || strings.Contains(strings.ToLower(info.Game), "garry") {
-		result.Game = "gmod"
-	} else {
-		result.Game = "source"
-	}
+	result.Game = s.detectGameType(info.Game, info.AppID)
 
 	// Query players if requested
 	if opts.Players {
@@ -418,6 +410,67 @@ func (s *SourceProtocol) readNullTerminatedString(data []byte, offset int) (stri
 		return "", offset, fmt.Errorf("unterminated string")
 	}
 	return string(data[start:offset]), offset + 1, nil
+}
+
+// detectGameType determines the specific game based on game description and App ID
+func (s *SourceProtocol) detectGameType(gameDesc string, appID uint16) string {
+	gameLower := strings.ToLower(gameDesc)
+	
+	// Check by App ID first (most reliable)
+	// Note: Some newer games have App IDs that exceed uint16 range
+	switch appID {
+	case 730:
+		return "csgo"
+	case 240: 
+		return "css"
+	case 4000:
+		return "gmod"
+	case 440:
+		return "tf2"
+	case 550:
+		return "left4dead2"
+	case 500:
+		return "left4dead"
+	case 320:
+		return "halflife"
+	case 300:
+		return "dods"
+	// Note: Rust (252490), Ark (346110), Insurgency (222880), Project Zomboid (108600)
+	// have App IDs that exceed uint16 range - handled by string matching below
+	}
+	
+	// Fallback to string matching
+	if strings.Contains(gameLower, "counter-strike 2") {
+		return "counterstrike2"
+	} else if strings.Contains(gameLower, "counter-strike: global offensive") {
+		return "counterstrike"
+	} else if strings.Contains(gameLower, "counter-strike") {
+		return "counterstrike"
+	} else if strings.Contains(gameLower, "garrysmod") || strings.Contains(gameLower, "garry") {
+		return "garrysmod"
+	} else if strings.Contains(gameLower, "team fortress") {
+		return "teamfortress2"
+	} else if strings.Contains(gameLower, "left 4 dead 2") {
+		return "left4dead2"
+	} else if strings.Contains(gameLower, "left 4 dead") {
+		return "left4dead"
+	} else if strings.Contains(gameLower, "rust") {
+		return "rust"
+	} else if strings.Contains(gameLower, "ark") {
+		return "arksurvivalevolved"
+	} else if strings.Contains(gameLower, "insurgency") {
+		return "insurgency"
+	} else if strings.Contains(gameLower, "day of defeat") {
+		return "dayofdefeat"
+	} else if strings.Contains(gameLower, "project zomboid") {
+		return "projectzomboid"
+	} else if strings.Contains(gameLower, "satisfactory") {
+		return "satisfactory"
+	} else if strings.Contains(gameLower, "7 days to die") {
+		return "7daystodie"
+	}
+	
+	return "source"
 }
 
 // A2SInfo represents the parsed A2S_INFO response

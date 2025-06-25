@@ -6,9 +6,9 @@ This is a CLI tool and Go library for querying game servers across multiple game
 
 ## Features
 
-- **Multi-game support**: Minecraft, CS2, CS:GO, Garry's Mod, Terraria, Valheim, etc.
+- **Multi-game support**: Minecraft, Source games (CS2, CS:GO, Rust, Ark, etc.), Terraria, Valheim, Factorio, 7 Days to Die, and more
 - **Auto-detection**: Detects game type automatically
-- **Player lists**: Get player information
+- **Player lists**: Get player information where supported
 - **Server details**: Names, versions, maps, MOTDs where available
 - **JSON/text output**: Multiple output formats
 - **Zero dependencies**: Pure Go, no external deps
@@ -29,9 +29,10 @@ gameserverquery localhost:25565
 # Query specific game type
 gameserverquery -game minecraft play.hypixel.net
 
-# Query specific Source games
-gameserverquery -game cs2 192.168.1.100:27015
-gameserverquery -game gmod 192.168.1.100:27015
+# Query specific games
+gameserverquery -game counterstrike2 192.168.1.100:27015
+gameserverquery -game rust 192.168.1.100:28015
+gameserverquery -game arksurvivalevolved 192.168.1.100:27015
 
 # Query with player list
 gameserverquery -game minecraft -players play.hypixel.net
@@ -56,7 +57,16 @@ gameserverquery -help
 
 Run `gameserverquery -list` to see all supported games. Popular ones include:
 
-`minecraft` `cs2` `csgo` `gmod` `tf2` `terraria` `valheim`
+**Core Protocols:**
+- `minecraft` - Minecraft Server List Ping
+- `source` - Source/Steam Query protocol (auto-detects specific games)
+- `terraria` - Terraria native protocol with TShock REST API support
+- `factorio` - Factorio UDP Query protocol
+
+**Source/Steam Query Games:**
+- `counterstrike2` `counterstrike` `countersource` `garrysmod` `teamfortress2`
+- `rust` `arksurvivalevolved` `left4dead` `left4dead2` `halflife`
+- `insurgency` `dayofdefeat` `projectzomboid` `valheim` `satisfactory` `7daystodie`
 
 ## Library Usage
 
@@ -75,7 +85,12 @@ info, err := query.Query(ctx, "minecraft", "play.hypixel.net:25565")
 info, err := query.AutoDetect(ctx, "localhost:25565")
 
 // With player list
-info, err := query.Query(ctx, "cs2", "server.com:27015", query.WithPlayers())
+info, err := query.Query(ctx, "counterstrike2", "server.com:27015", query.WithPlayers())
+
+// Query other games
+info, err := query.Query(ctx, "rust", "rust-server.com:28015")
+info, err := query.Query(ctx, "factorio", "factorio.example.com:34197")
+info, err := query.Query(ctx, "terraria", "terraria.example.com:7777")
 ```
 
 ## API

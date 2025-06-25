@@ -35,13 +35,13 @@ var realWorldServers = map[string][]struct {
 		{"Test Server 2", "tshock.example.com:7777"},
 		{"Test Server 3", "modded.terraria.net:7777"},
 	},
-	"valheim": {
-		// Note: Valheim dedicated servers are less common and often private
-		{"Local Test", "127.0.0.1:2456"},
-		{"Test Server 1", "valheim.example.com:2456"},
-		{"Test Server 2", "dedicated.valheim.net:2456"},
-		{"Test Server 3", "nordic.valheim.org:2456"},
-		{"Test Server 4", "survival.valheim.io:2456"},
+	"factorio": {
+		// Note: Factorio dedicated servers often run on non-standard ports
+		{"Local Test", "127.0.0.1:34197"},
+		{"Test Server 1", "factorio.example.com:34197"},
+		{"Test Server 2", "dedicated.factorio.net:34197"},
+		{"Test Server 3", "modded.factorio.org:34197"},
+		{"Test Server 4", "factory.factorio.io:34197"},
 	},
 }
 
@@ -69,12 +69,12 @@ func TestRealWorldTerrariaServers(t *testing.T) {
 	testRealWorldServers(t, "terraria", realWorldServers["terraria"])
 }
 
-func TestRealWorldValheimServers(t *testing.T) {
+func TestRealWorldFactorioServers(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping real-world server tests in short mode")
 	}
 
-	testRealWorldServers(t, "valheim", realWorldServers["valheim"])
+	testRealWorldServers(t, "factorio", realWorldServers["factorio"])
 }
 
 func testRealWorldServers(t *testing.T, game string, servers []struct{ name, addr string }) {
@@ -133,12 +133,12 @@ func testRealWorldServers(t *testing.T, game string, servers []struct{ name, add
 	}
 
 	// Allow for many servers to be down - just require that we can connect to real servers when they exist
-	// For minecraft, source, and terraria we expect at least one to work. For valheim, it's acceptable if none work.
+	// For minecraft and source we expect at least one to work. For terraria and factorio, it's acceptable if none work.
 	var minRequired int
-	if game == "minecraft" || game == "source" || game == "terraria" {
+	if game == "minecraft" || game == "source" {
 		minRequired = 1
 	} else {
-		minRequired = 0 // Valheim servers are harder to find
+		minRequired = 0 // Terraria and Factorio servers are harder to find publicly
 	}
 	
 	if successCount < minRequired {

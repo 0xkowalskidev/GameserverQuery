@@ -10,11 +10,11 @@ import (
 func TestSupportedGames(t *testing.T) {
 	games := SupportedGames()
 
-	expectedGames := []string{"minecraft", "source", "terraria", "valheim"}
-	expectedAliases := []string{"cs2", "csgo", "gmod", "tf2"}
+	expectedProtocols := []string{"minecraft", "source", "terraria", "factorio"}
+	expectedAliases := []string{"counterstrike2", "counterstrike", "garrysmod", "teamfortress2", "rust", "arksurvivalevolved", "valheim", "7daystodie"}
 	
-	if len(games) < len(expectedGames)+len(expectedAliases) {
-		t.Errorf("Expected at least %d games, got %d", len(expectedGames)+len(expectedAliases), len(games))
+	if len(games) < len(expectedProtocols)+len(expectedAliases) {
+		t.Errorf("Expected at least %d games, got %d", len(expectedProtocols)+len(expectedAliases), len(games))
 	}
 
 	gameMap := make(map[string]bool)
@@ -23,9 +23,9 @@ func TestSupportedGames(t *testing.T) {
 	}
 
 	// Check primary protocols
-	for _, expected := range expectedGames {
+	for _, expected := range expectedProtocols {
 		if !gameMap[expected] {
-			t.Errorf("Expected game '%s' not found in supported games", expected)
+			t.Errorf("Expected protocol '%s' not found in supported games", expected)
 		}
 	}
 	
@@ -45,10 +45,12 @@ func TestDefaultPort(t *testing.T) {
 		{"minecraft", 25565},
 		{"source", 27015},
 		{"terraria", 7777},
-		{"valheim", 2456},
-		{"cs2", 27015},      // Alias should work
-		{"csgo", 27015},     // Alias should work
-		{"gmod", 27015},     // Alias should work
+		{"factorio", 34197},
+		{"counterstrike2", 27015},    // Alias should work
+		{"counterstrike", 27015},     // Alias should work
+		{"garrysmod", 27015},         // Alias should work
+		{"valheim", 27015},           // Alias should work
+		{"7daystodie", 27015},        // Alias should work
 		{"invalid", 0},
 	}
 
@@ -68,11 +70,14 @@ func TestGameAliases(t *testing.T) {
 		alias    string
 		expected string
 	}{
-		{"cs2", "source"},
-		{"csgo", "source"},
-		{"gmod", "source"},
-		{"tf2", "source"},
-		{"cssource", "source"},
+		{"counterstrike2", "source"},
+		{"counterstrike", "source"},
+		{"garrysmod", "source"},
+		{"teamfortress2", "source"},
+		{"countersource", "source"},
+		{"rust", "source"},
+		{"valheim", "source"},
+		{"7daystodie", "source"},
 	}
 	
 	for _, test := range aliasTests {

@@ -2,8 +2,10 @@ package protocol
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -41,15 +43,23 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 	}
 	conn.SetDeadline(deadline)
 
-	// Send a simple connection request packet first
-	// Packet 1: Connect Request (0x01)
-	connectPacket := []byte{
-		0x05, 0x00, 0x00, 0x00, // Length: 5 bytes (excluding length field)
-		0x01, // Packet type: Connect Request
+	start := time.Now()
+
+	// Try TShock REST API first (more reliable)
+	if info, err := t.queryTShockAPI(ctx, addr, opts.Timeout); err == nil {
+		info.Ping = time.Since(start)
+		return info, nil
 	}
 
-	if _, err := conn.Write(connectPacket); err != nil {
-		return &ServerInfo{Online: false}, fmt.Errorf("write connect failed: %w", err)
+	// Fallback to native protocol
+	// Send server info request packet
+	serverInfoPacket := []byte{
+		0x05, 0x00, 0x00, 0x00, // Length: 5 bytes (excluding length field)
+		0x01, // Packet type: Server Info Request
+	}
+
+	if _, err := conn.Write(serverInfoPacket); err != nil {
+		return &ServerInfo{Online: false}, fmt.Errorf("write server info request failed: %w", err)
 	}
 
 	// Read response - could be any packet type
@@ -59,12 +69,15 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
+	ping := time.Since(start)
+
 	// Parse whatever response we get
 	info, err := t.parseResponse(response[:n])
 	if err != nil {
 		return &ServerInfo{Online: false}, fmt.Errorf("parse failed: %w", err)
 	}
 
+	info.Ping = ping
 	return info, nil
 }
 
@@ -202,4 +215,79 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 	}
 
 	return info, nil
+}
+
+// queryTShockAPI attempts to query TShock REST API
+func (t *TerrariaProtocol) queryTShockAPI(ctx context.Context, addr string, timeout time.Duration) (*ServerInfo, error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address: %w", err)
+	}
+
+	_, err = strconv.Atoi(portStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid port: %w", err)
+	}
+
+	// TShock REST API is typically on port 7878
+	restPort := 7878
+	
+	// Try common TShock REST API endpoints
+	endpoints := []string{
+		fmt.Sprintf("http://%s:%d/v2/server/status", host, restPort),
+		fmt.Sprintf("http://%s:%d/status", host, restPort),
+		fmt.Sprintf("http://%s:%d/v3/server/status", host, restPort),
+	}
+
+	client := &http.Client{Timeout: timeout}
+
+	for _, endpoint := range endpoints {
+		req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+		if err != nil {
+			continue
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusOK {
+			var tshockStatus TShockStatus
+			if err := json.NewDecoder(resp.Body).Decode(&tshockStatus); err != nil {
+				continue
+			}
+
+			return &ServerInfo{
+				Name:    tshockStatus.Name,
+				Version: tshockStatus.TerrariaVersion,
+				Online:  true,
+				Players: PlayerInfo{
+					Current: tshockStatus.PlayerCount,
+					Max:     tshockStatus.MaxPlayers,
+					List:    make([]Player, 0),
+				},
+				Game: "terraria",
+				Extra: map[string]string{
+					"world":      tshockStatus.World,
+					"tshock":     tshockStatus.TShockVersion,
+					"difficulty": strconv.Itoa(tshockStatus.Difficulty),
+				},
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("TShock API not available")
+}
+
+// TShockStatus represents TShock REST API response
+type TShockStatus struct {
+	Name            string `json:"name"`
+	World           string `json:"world"`
+	PlayerCount     int    `json:"playercount"`
+	MaxPlayers      int    `json:"maxplayers"`
+	TerrariaVersion string `json:"terraria_version"`
+	TShockVersion   string `json:"tshock_version"`
+	Difficulty      int    `json:"difficulty"`
 }

@@ -40,7 +40,7 @@ func Query(ctx context.Context, game, addr string, opts ...Option) (*protocol.Se
 	}
 
 	// Set common fields
-	setServerInfoFields(info, host, port, proto.Name(), start)
+	setServerInfoFields(info, host, port, game, start)
 	return info, nil
 }
 
@@ -69,7 +69,7 @@ func AutoDetect(ctx context.Context, addr string, opts ...Option) (*protocol.Ser
 	}
 
 	// Try common games in order of popularity
-	games := []string{"minecraft", "source", "terraria", "valheim"}
+	games := []string{"minecraft", "source", "terraria", "valheim", "rust", "ark", "factorio", "sevendtd", "projectzomboid", "satisfactory"}
 	
 	for _, game := range games {
 		if proto, exists := protocol.GetProtocol(game); exists {
