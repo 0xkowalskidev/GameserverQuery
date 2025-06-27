@@ -98,6 +98,7 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	
 	info := &ServerInfo{
 		Name:    "", // Minecraft protocol doesn't provide a separate server name
+		Game:    m.Name(),
 		MOTD:    motd,
 		Version: status.Version.Name,
 		Online:  true,
