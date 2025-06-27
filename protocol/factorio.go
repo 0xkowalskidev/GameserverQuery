@@ -88,6 +88,7 @@ func (f *FactorioProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 		// No JSON found, create basic response
 		return &ServerInfo{
 			Name:    "Factorio Server",
+			Game:    f.Name(),
 			Version: "Unknown",
 			Online:  true,
 			Players: PlayerInfo{
@@ -115,6 +116,7 @@ func (f *FactorioProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 		// JSON parsing failed, return basic info
 		return &ServerInfo{
 			Name:    "Factorio Server",
+			Game:    f.Name(),
 			Version: "Unknown",
 			Online:  true,
 			Players: PlayerInfo{
@@ -132,6 +134,7 @@ func (f *FactorioProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 
 	return &ServerInfo{
 		Name:    factorioInfo.Name,
+		Game:    f.Name(),
 		Version: factorioInfo.Version,
 		Online:  true,
 		Players: PlayerInfo{

@@ -100,6 +100,7 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 		// Just having a valid response means the server is online
 		info := &ServerInfo{
 			Name:    "Terraria Server (Player Info)",
+			Game:    t.Name(),
 			Version: "Unknown",
 			Online:  true,
 			Players: PlayerInfo{
@@ -118,6 +119,7 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 		// Any valid packet response means the server is a Terraria server
 		info := &ServerInfo{
 			Name:    fmt.Sprintf("Terraria Server (Type: 0x%02x)", packetType),
+			Game:    t.Name(),
 			Version: "Unknown", 
 			Online:  true,
 			Players: PlayerInfo{
@@ -151,6 +153,7 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 	// Parse the response text to extract server information
 	info := &ServerInfo{
 		Name:    "Terraria Server",
+		Game:    t.Name(),
 		Version: "Unknown",
 		Online:  true,
 		Players: PlayerInfo{

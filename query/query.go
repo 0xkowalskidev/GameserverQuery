@@ -140,7 +140,7 @@ func parseAddress(addr string, optPort, defaultPort int) (string, int, error) {
 func setServerInfoFields(info *protocol.ServerInfo, host string, port int, game string, start time.Time) {
 	info.Address = host
 	info.Port = port
-	info.Game = game
+	// Game field should be set by the protocol implementation, not here
 	info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
 }
 
