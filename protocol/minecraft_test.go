@@ -156,7 +156,7 @@ func TestMinecraftProtocol_Query(t *testing.T) {
 	assertServerInfo(t, info, expectedServerInfo{
 		online:         true,
 		game:           "minecraft",
-		motd:           "A Minecraft Server",
+		name:           "A Minecraft Server",
 		version:        "1.19.4",
 		playersCurrent: 5,
 		playersMax:     100,
@@ -192,7 +192,7 @@ func TestMinecraftProtocol_Query_ComplexMOTD(t *testing.T) {
 	assertServerInfo(t, info, expectedServerInfo{
 		online:         true,
 		game:           "minecraft",
-		motd:           "Welcome!A Multi-Line\nMOTD!",
+		name:           "Welcome!A Multi-Line\nMOTD!",
 		version:        "1.20.1",
 		playersCurrent: 1,
 		playersMax:     20,
@@ -220,7 +220,7 @@ func TestMinecraftProtocol_Query_EmptyPlayerList(t *testing.T) {
 	assertServerInfo(t, info, expectedServerInfo{
 		online:         true,
 		game:           "minecraft",
-		motd:           "Empty Server",
+		name:           "Empty Server",
 		version:        "1.20.1",
 		playersCurrent: 0,
 		playersMax:     50,
@@ -249,7 +249,7 @@ func TestMinecraftProtocol_Query_NoPlayersRequested(t *testing.T) {
 	assertServerInfo(t, info, expectedServerInfo{
 		online:         true,
 		game:           "minecraft",
-		motd:           "Test Server",
+		name:           "Test Server",
 		version:        "1.19.4",
 		playersCurrent: 25,
 		playersMax:     100,
@@ -261,7 +261,7 @@ func TestMinecraftProtocol_Query_NoPlayersRequested(t *testing.T) {
 type expectedServerInfo struct {
 	online         bool
 	game           string
-	motd           string
+	name           string
 	version        string
 	playersCurrent int
 	playersMax     int
@@ -275,11 +275,10 @@ func assertServerInfo(t *testing.T, info *ServerInfo, expected expectedServerInf
 	// Basic fields
 	assert.Equal(t, expected.online, info.Online)
 	assert.Equal(t, expected.game, info.Game)
-	assert.Equal(t, expected.motd, info.MOTD)
+	assert.Equal(t, expected.name, info.Name)
 	assert.Equal(t, expected.version, info.Version)
 	
 	// Fields not set by Minecraft protocol
-	assert.Empty(t, info.Name, "Minecraft protocol doesn't set server name")
 	assert.Empty(t, info.Address, "Address not set by protocol")
 	assert.Zero(t, info.Port, "Port not set by protocol")
 	assert.Empty(t, info.Map, "Map field not used by Minecraft")

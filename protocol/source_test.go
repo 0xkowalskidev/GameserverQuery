@@ -461,7 +461,6 @@ func assertSourceServerInfo(t *testing.T, info *ServerInfo, expected expectedSou
 	assert.Equal(t, expected.version, info.Version)
 	
 	// Fields not set by Source protocol
-	assert.Empty(t, info.MOTD, "Source protocol doesn't set MOTD")
 	assert.Empty(t, info.Address, "Address not set by protocol")
 	assert.Zero(t, info.Port, "Port not set by protocol")
 	assert.GreaterOrEqual(t, info.Ping, 0, "Ping should be non-negative")

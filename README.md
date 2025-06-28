@@ -9,7 +9,7 @@ This is a CLI tool and Go library for querying game servers across multiple game
 - **Multi-game support**: Minecraft, Source games (CS2, CS:GO, Rust, Ark, etc.), Terraria, Valheim, 7 Days to Die, and more
 - **Auto-detection**: Detects game type automatically
 - **Player lists**: Get player information where supported
-- **Server details**: Names, versions, maps, MOTDs where available
+- **Server details**: Names, versions, maps where available
 - **JSON/text output**: Multiple output formats
 - **Zero dependencies**: Pure Go, no external deps
 
@@ -105,7 +105,6 @@ type ServerInfo struct {
     Port        int               `json:"port"`         // Server port
     Players     PlayerInfo        `json:"players"`      // Player information
     Map         string            `json:"map,omitempty"`         // Current map (optional)
-    MOTD        string            `json:"motd,omitempty"`        // Message of the day (optional)
     Ping        time.Duration     `json:"ping"`         // Query response time
     Online      bool              `json:"online"`       // Server online status
     Extra       map[string]string `json:"extra,omitempty"`       // Additional game-specific data

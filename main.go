@@ -144,7 +144,6 @@ func outputText(info *protocol.ServerInfo) error {
 	
 	// Optional fields
 	printIfNotEmpty("Map", info.Map)
-	printIfNotEmpty("MOTD", info.MOTD)
 	if info.Ping > 0 {
 		fmt.Printf("Ping: %d\n", info.Ping)
 	}

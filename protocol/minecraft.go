@@ -97,9 +97,8 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	motd := m.cleanMotd(status.Description)
 	
 	info := &ServerInfo{
-		Name:    "", // Minecraft protocol doesn't provide a separate server name
+		Name:    motd, // Use MOTD as the server name for Minecraft
 		Game:    m.Name(),
-		MOTD:    motd,
 		Version: status.Version.Name,
 		Online:  true,
 		Players: PlayerInfo{

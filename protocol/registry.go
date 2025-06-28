@@ -26,7 +26,6 @@ type ServerInfo struct {
 	Port        int               `json:"port"`
 	Players     PlayerInfo        `json:"players"`
 	Map         string            `json:"map,omitempty"`
-	MOTD        string            `json:"motd,omitempty"`
 	Ping        int               `json:"ping"`
 	Online      bool              `json:"online"`
 	Extra       map[string]string `json:"extra,omitempty"`
