@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"net"
 	"strings"
 	"time"
@@ -387,8 +388,10 @@ func (s *SourceProtocol) parsePlayersResponse(data []byte) ([]Player, error) {
 		if offset+3 >= len(data) {
 			break
 		}
-		durationFloat := binary.LittleEndian.Uint32(data[offset : offset+4])
-		duration := time.Duration(durationFloat) * time.Second
+		durationBits := binary.LittleEndian.Uint32(data[offset : offset+4])
+		durationFloat := math.Float32frombits(durationBits)
+		// Round to nearest second
+		duration := time.Duration(math.Round(float64(durationFloat))) * time.Second
 		offset += 4
 
 		players = append(players, Player{
