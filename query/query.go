@@ -69,7 +69,7 @@ func AutoDetect(ctx context.Context, addr string, opts ...Option) (*protocol.Ser
 	}
 
 	// Try common games in order of popularity
-	games := []string{"minecraft", "source", "terraria", "valheim", "rust", "ark-survival-evolved", "factorio", "7-days-to-die", "project-zomboid", "satisfactory"}
+	games := []string{"minecraft", "source", "terraria", "valheim", "rust", "ark-survival-evolved", "7-days-to-die", "project-zomboid", "satisfactory"}
 	
 	for _, game := range games {
 		if proto, exists := protocol.GetProtocol(game); exists {

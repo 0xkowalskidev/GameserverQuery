@@ -10,7 +10,7 @@ import (
 func TestSupportedGames(t *testing.T) {
 	games := SupportedGames()
 
-	expectedProtocols := []string{"minecraft", "source", "terraria", "factorio"}
+	expectedProtocols := []string{"minecraft", "source", "terraria"}
 	expectedAliases := []string{"counter-strike-2", "counter-strike", "garrys-mod", "team-fortress-2", "rust", "ark-survival-evolved", "valheim", "7-days-to-die"}
 	
 	if len(games) < len(expectedProtocols)+len(expectedAliases) {
@@ -45,7 +45,6 @@ func TestDefaultPort(t *testing.T) {
 		{"minecraft", 25565},
 		{"source", 27015},
 		{"terraria", 7777},
-		{"factorio", 34197},
 		{"counter-strike-2", 27015},    // Alias should work
 		{"counter-strike", 27015},     // Alias should work
 		{"garrys-mod", 27015},         // Alias should work

@@ -6,7 +6,7 @@ This is a CLI tool and Go library for querying game servers across multiple game
 
 ## Features
 
-- **Multi-game support**: Minecraft, Source games (CS2, CS:GO, Rust, Ark, etc.), Terraria, Valheim, Factorio, 7 Days to Die, and more
+- **Multi-game support**: Minecraft, Source games (CS2, CS:GO, Rust, Ark, etc.), Terraria, Valheim, 7 Days to Die, and more
 - **Auto-detection**: Detects game type automatically
 - **Player lists**: Get player information where supported
 - **Server details**: Names, versions, maps, MOTDs where available
@@ -61,7 +61,6 @@ Run `gameserverquery -list` to see all supported games. Popular ones include:
 - `minecraft` - Minecraft Server List Ping
 - `source` - Source/Steam Query protocol (auto-detects specific games)
 - `terraria` - Terraria native protocol with TShock REST API support
-- `factorio` - Factorio UDP Query protocol
 
 **Source/Steam Query Games:**
 - `counter-strike-2` `counter-strike` `counter-source` `garrys-mod` `team-fortress-2`
@@ -89,7 +88,7 @@ info, err := query.Query(ctx, "counter-strike-2", "server.com:27015", query.With
 
 // Query other games
 info, err := query.Query(ctx, "rust", "rust-server.com:28015")
-info, err := query.Query(ctx, "factorio", "factorio.example.com:34197")
+info, err := query.Query(ctx, "terraria", "terraria.example.com:7777")
 info, err := query.Query(ctx, "terraria", "terraria.example.com:7777")
 ```
 
