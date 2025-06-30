@@ -15,54 +15,43 @@ import (
 )
 
 func main() {
-	// Check for list games flag first
-	if len(os.Args) > 1 && (os.Args[1] == "-list" || os.Args[1] == "--list") {
-		listGames()
+	// Show help if no arguments provided
+	if len(os.Args) < 2 {
+		showHelp()
 		return
 	}
 
-	// Default to query command if no subcommand specified
-	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
+	// Default to query command if flag is specified
+	if strings.HasPrefix(os.Args[1], "-") {
 		// Run query command by default
 		queryCmd()
 		return
 	}
 
 	switch os.Args[1] {
-	case "query":
-		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
-		queryCmd()
 	case "scan":
 		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
 		scanCmd()
-	case "help", "-help", "--help":
-		showHelp()
+	case "list":
+		listGames()
 	default:
-		// If it's not a known command, assume it's an address and run query
 		queryCmd()
 	}
 }
 
 func queryCmd() {
 	var (
-		timeout    = flag.Duration("timeout", 5*time.Second, "Query timeout")
-		format     = flag.String("format", "text", "Output format (text, json)")
-		players    = flag.Bool("players", false, "Include player list")
-		game       = flag.String("game", "", "Game type (auto-detect if not specified)")
-		debug      = flag.Bool("debug", false, "Enable debug logging")
-		help       = flag.Bool("help", false, "Show help")
+		timeout = flag.Duration("timeout", 5*time.Second, "Query timeout")
+		format  = flag.String("format", "text", "Output format (text, json)")
+		players = flag.Bool("players", false, "Include player list")
+		game    = flag.String("game", "", "Game type (auto-detect if not specified)")
+		debug   = flag.Bool("debug", false, "Enable debug logging")
 	)
 	flag.Parse()
-
-	if *help {
-		showQueryHelp()
-		return
-	}
 
 	args := flag.Args()
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: gameserverquery [query] [options] <address[:port]>\n")
-		fmt.Fprintf(os.Stderr, "Run 'gameserverquery -help' for more information\n")
 		os.Exit(1)
 	}
 
@@ -112,35 +101,28 @@ func scanCmd() {
 		concurrency = flag.Int("concurrency", 10, "Maximum concurrent queries")
 		noProgress  = flag.Bool("no-progress", false, "Disable progress indicator")
 		debug       = flag.Bool("debug", false, "Enable debug logging")
-		help        = flag.Bool("help", false, "Show help")
 	)
 	flag.Parse()
 
-	if *help {
-		showScanHelp()
+	args := flag.Args()
+	if len(args) != 1 {
+		showHelp()
 		return
 	}
 
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Usage: gameserverquery scan [options] <address>\n")
-		fmt.Fprintf(os.Stderr, "Run 'gameserverquery scan -help' for more information\n")
-		os.Exit(1)
-	}
-
 	address := args[0]
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout * 10) // Allow more time for scanning
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout*10) // Allow more time for scanning
 	defer cancel()
 
 	// Build options
 	var opts []query.Option
 	opts = append(opts, query.Timeout(*timeout))
 	opts = append(opts, query.WithMaxConcurrency(*concurrency))
-	
+
 	if *players {
 		opts = append(opts, query.WithPlayers())
 	}
-	
+
 	if *debug {
 		opts = append(opts, query.WithDebug())
 	}
@@ -166,23 +148,23 @@ func scanCmd() {
 
 	// Use progress indicator unless disabled or JSON format
 	showProgress := !*noProgress && *format != "json"
-	
+
 	var servers []*protocol.ServerInfo
 	var err error
-	
+
 	if showProgress {
 		// Use progress-enabled version
 		progressChan := make(chan query.ScanProgress, 100)
-		
+
 		// Start progress display in separate goroutine
 		progressDone := make(chan struct{})
 		go func() {
 			defer close(progressDone)
-			
+
 			for progress := range progressChan {
 				if progress.TotalPorts == 0 {
 					// Discovery phase - show ports being checked
-					fmt.Fprintf(os.Stderr, "\r\033[KDiscovering ports... Checked %d ports, found %d server(s)", 
+					fmt.Fprintf(os.Stderr, "\r\033[KDiscovering ports... Checked %d ports, found %d server(s)",
 						progress.Completed, progress.ServersFound)
 				} else {
 					// Final scanning phase - show percentage
@@ -192,35 +174,35 @@ func scanCmd() {
 					if totalScans > 0 {
 						percentage = (progress.Completed * 100) / totalScans
 					}
-					
-					fmt.Fprintf(os.Stderr, "\r\033[K[%d%%] Scanning %d ports... Found %d server(s), %d scans remaining", 
+
+					fmt.Fprintf(os.Stderr, "\r\033[K[%d%%] Scanning %d ports... Found %d server(s), %d scans remaining",
 						percentage, progress.TotalPorts, progress.ServersFound, remaining)
 				}
-				
+
 				// Force output to appear immediately
 				os.Stderr.Sync()
 			}
-			
+
 			// Final update - clear the progress line completely
 			fmt.Fprintf(os.Stderr, "\r\033[K")
 			// Move cursor to start of line and clear any remaining content
 			fmt.Fprintf(os.Stderr, "\r")
 		}()
-		
+
 		servers, err = query.DiscoverServersWithProgress(ctx, address, progressChan, opts...)
 		<-progressDone // Wait for progress display to finish
-		
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		// Print a newline after progress is done
 		fmt.Fprintln(os.Stderr)
 	} else {
 		// Use regular version without progress
 		servers, err = query.DiscoverServers(ctx, address, opts...)
-		
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
@@ -242,74 +224,31 @@ func showHelp() {
 	fmt.Printf(`GameserverQuery - Query game servers for status information
 
 Usage:
-  gameserverquery [query] [options] <address[:port]>    # Query a single server
-  gameserverquery scan [options] <address>              # Scan for multiple servers
-  gameserverquery -list                                 # List supported games
+  gameserverquery [options] <address[:port]>    # Query a single server
+  gameserverquery scan [options] <address>      # Scan for multiple servers
+  gameserverquery list                          # List supported games
 
-Commands:
-  query    Query a single game server (default command)
-  scan     Scan an IP for multiple game servers
-
-Global Options:
-  -help    Show help for a command
-  -list    List supported games
-
-Run 'gameserverquery [command] -help' for command-specific help.
-
-Examples:
-  gameserverquery localhost:25565                       # Auto-detect single server
-  gameserverquery scan 192.168.1.100                   # Scan all default ports
-  gameserverquery scan -port-start 25565 -port-end 25575 192.168.1.100
-`)
-}
-
-func showQueryHelp() {
-	fmt.Printf(`GameserverQuery Query - Query a single game server
-
-Usage: gameserverquery [query] [options] <address[:port]>
-
-Options:
+Common Options:
   -timeout duration    Query timeout (default 5s)
-  -format string       Output format: text, json (default "text")  
+  -format string       Output format: text, json (default "text")
   -players             Include player list
-  -game string         Game type (minecraft, cs2, csgo, gmod, tf2, terraria, valheim, etc.)
   -debug               Enable debug logging
-  -help                Show this help
+
+Query Options:
+  -game string         Game type (auto-detect if not specified)
+
+Scan Options:
+  -port-start int      Start of port range to scan
+  -port-end int        End of port range to scan
+  -ports string        Comma-separated list of ports to scan
+  -concurrency int     Maximum concurrent queries (default 10)
+  -no-progress         Disable progress indicator
 
 Examples:
-  gameserverquery localhost:25565                    # Auto-detect game type
-  gameserverquery -game minecraft play.hypixel.net  # Query Minecraft server
-  gameserverquery -game cs2 192.168.1.100:27015    # Query CS2 server  
-  gameserverquery -players -format json localhost   # Include players, JSON output
-
-Auto-detection tries common game types based on port numbers or by testing protocols.
-`)
-}
-
-func showScanHelp() {
-	fmt.Printf(`GameserverQuery Scan - Scan for multiple game servers
-
-Usage: gameserverquery scan [options] <address>
-
-Options:
-  -timeout duration     Query timeout per server (default 5s)
-  -format string        Output format: text, json (default "text")
-  -players              Include player list
-  -port-start int       Start of port range to scan
-  -port-end int         End of port range to scan
-  -ports string         Comma-separated list of ports to scan
-  -concurrency int      Maximum concurrent queries (default 10)
-  -no-progress          Disable progress indicator
-  -help                 Show this help
-
-Examples:
-  gameserverquery scan 192.168.1.100                          # Scan all default ports with progress
-  gameserverquery scan -ports 25565,27015,7777 192.168.1.100  # Scan specific ports
-  gameserverquery scan -port-start 25565 -port-end 25575 192.168.1.100
-  gameserverquery scan -format json -players 192.168.1.100    # JSON output (no progress)
-  gameserverquery scan -no-progress 192.168.1.100             # Disable progress indicator
-
-By default, scans all known default game ports with progress indicator. Use -no-progress to disable.
+  gameserverquery play.hypixel.net                        # Query gameserver
+  gameserverquery play.hypixel.net -players               # Include players list
+  gameserverquery -game minecraft play.hypixel.net:25565  # Query gameserver with port and/or game, faster
+  gameserverquery scan 127.0.0.1                          # Scan address for gameservers
 `)
 }
 
@@ -351,7 +290,7 @@ func outputText(info *protocol.ServerInfo) error {
 	}
 	fmt.Printf("Address: %s:%d\n", info.Address, info.Port)
 	fmt.Printf("Players: %d/%d\n", info.Players.Current, info.Players.Max)
-	
+
 	// Optional fields
 	printIfNotEmpty("Map", info.Map)
 	if info.Ping > 0 {
@@ -361,7 +300,7 @@ func outputText(info *protocol.ServerInfo) error {
 
 	// Extra information
 	printExtra(info.Extra)
-	
+
 	// Player list
 	printPlayers(info.Players.List)
 
@@ -414,12 +353,12 @@ func outputScanResults(servers []*protocol.ServerInfo, format string) error {
 
 func outputScanText(servers []*protocol.ServerInfo) error {
 	fmt.Printf("Found %d game server(s)\n\n", len(servers))
-	
+
 	for i, info := range servers {
 		if i > 0 {
 			fmt.Println(strings.Repeat("-", 50))
 		}
-		
+
 		fmt.Printf("Server #%d\n", i+1)
 		if info.Name != "" {
 			fmt.Printf("  Name: %s\n", info.Name)
@@ -436,7 +375,7 @@ func outputScanText(servers []*protocol.ServerInfo) error {
 		if info.Ping > 0 {
 			fmt.Printf("  Ping: %dms\n", info.Ping)
 		}
-		
+
 		// Show player list if available
 		if len(info.Players.List) > 0 {
 			fmt.Printf("  Players:\n")
@@ -452,6 +391,6 @@ func outputScanText(servers []*protocol.ServerInfo) error {
 			}
 		}
 	}
-	
+
 	return nil
 }

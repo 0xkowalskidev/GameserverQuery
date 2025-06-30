@@ -94,8 +94,10 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 			Current: status.Players.Online,
 			Max:     status.Players.Max,
 		},
-		// Game field will be set by central game detector
 	}
+	
+	// Use central game detector to set the game field
+	info.Game = DetectGameFromResponse(info, "minecraft")
 
 	// Add player list if requested
 	if opts.Players {

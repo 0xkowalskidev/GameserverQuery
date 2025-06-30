@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"net"
 	"testing"
@@ -424,12 +425,20 @@ func TestSourceProtocol_GameDetection(t *testing.T) {
 			expectedGame: "source",
 		},
 	}
-
-	protocol := &SourceProtocol{}
 	
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := protocol.detectGameType(tt.gameDesc, tt.appID)
+			// Create a mock ServerInfo with the test data
+			info := &ServerInfo{
+				Online: true,
+				Extra: map[string]string{
+					"game":   tt.gameDesc,
+					"app_id": fmt.Sprintf("%d", tt.appID),
+				},
+			}
+			
+			// Use the centralized game detector
+			result := DetectGameFromResponse(info, "source")
 			assert.Equal(t, tt.expectedGame, result)
 		})
 	}
@@ -464,7 +473,13 @@ func assertSourceServerInfo(t *testing.T, info *ServerInfo, expected expectedSou
 	assert.Empty(t, info.Address, "Address not set by protocol")
 	assert.Zero(t, info.Port, "Port not set by protocol")
 	assert.GreaterOrEqual(t, info.Ping, 0, "Ping should be non-negative")
-	assert.Nil(t, info.Extra, "Extra fields should be nil")
+	
+	// Extra fields should contain game metadata for debugging
+	assert.NotNil(t, info.Extra, "Extra fields should contain metadata")
+	if info.Extra != nil {
+		assert.Contains(t, info.Extra, "game", "Extra should contain game description")
+		assert.Contains(t, info.Extra, "app_id", "Extra should contain app ID")
+	}
 	
 	// Player information
 	assert.Equal(t, expected.playersCurrent, info.Players.Current)

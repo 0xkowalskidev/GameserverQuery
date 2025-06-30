@@ -93,13 +93,14 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 			Name:    "Terraria Server (Player Info)",
 			Version: "Unknown",
 			Online:  true,
-			// Game field will be set by central game detector
 			Players: PlayerInfo{
 				Current: 0,
 				Max:     8,
 				List:    make([]Player, 0),
 			},
 		}
+		// Use central game detector to set the game field
+		info.Game = DetectGameFromResponse(info, "terraria")
 		return info, nil
 		
 	case 0x19: // Chat message response
@@ -112,13 +113,14 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 			Name:    fmt.Sprintf("Terraria Server (Type: 0x%02x)", packetType),
 			Version: "Unknown", 
 			Online:  true,
-			// Game field will be set by central game detector
 			Players: PlayerInfo{
 				Current: 0,
 				Max:     8,
 				List:    make([]Player, 0),
 			},
 		}
+		// Use central game detector to set the game field
+		info.Game = DetectGameFromResponse(info, "terraria")
 		return info, nil
 	}
 
@@ -146,12 +148,14 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 		Name:    "Terraria Server",
 		Version: "Unknown",
 		Online:  true,
-		// Game field will be set by central game detector
 		Players: PlayerInfo{
 			Current: 0,
 			Max:     8, // Default Terraria max
 		},
 	}
+	
+	// Use central game detector to set the game field
+	info.Game = DetectGameFromResponse(info, "terraria")
 
 	// Try to extract player count from common response patterns
 	// Pattern 1: "Online players: X/Y"

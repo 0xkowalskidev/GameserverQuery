@@ -107,8 +107,10 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 			"game":   info.Game,
 			"app_id": fmt.Sprintf("%d", info.AppID),
 		},
-		// Game field will be set by central game detector
 	}
+	
+	// Use central game detector to set the game field
+	result.Game = DetectGameFromResponse(result, "source")
 
 	// Query players if requested
 	if opts.Players {
@@ -170,8 +172,10 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 			"game":   info.Game,
 			"app_id": fmt.Sprintf("%d", info.AppID),
 		},
-		// Game field will be set by central game detector
 	}
+	
+	// Use central game detector to set the game field
+	result.Game = DetectGameFromResponse(result, "source")
 
 	// Query players if requested
 	if opts.Players {

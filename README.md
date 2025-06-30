@@ -48,9 +48,6 @@ gameserverquery -list
 
 # Custom timeout
 gameserverquery -timeout 10s localhost:25565
-
-# Help
-gameserverquery -help
 ```
 
 ### Supported Games
