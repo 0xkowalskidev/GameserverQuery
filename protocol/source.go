@@ -14,7 +14,7 @@ type SourceProtocol struct{}
 
 func init() {
 	registry.Register(&SourceProtocol{})
-	
+
 	// Register game aliases (slugified game names)
 	registry.RegisterAlias("counter-strike-2", "source")
 	registry.RegisterAlias("counter-strike", "source") // CS:GO is "Counter-Strike"
@@ -45,14 +45,12 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	if opts.Debug {
 		debugLogf("Source", "Starting query for %s", addr)
 	}
-	
+
 	conn, err := setupConnection(ctx, "udp", addr, opts)
 	if err != nil {
 		return &ServerInfo{Online: false}, err
 	}
 	defer conn.Close()
-
-	start := time.Now()
 
 	// Build A2S_INFO request
 	request := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x54}
@@ -62,6 +60,9 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 		debugLogf("Source", "Sending A2S_INFO request (%d bytes)", len(request))
 	}
 
+	// Measure ping from request send to response receive
+	pingStart := time.Now()
+	
 	// Send request
 	if _, err := conn.Write(request); err != nil {
 		if opts.Debug {
@@ -73,14 +74,15 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	// Read response
 	response := make([]byte, 1400)
 	n, err := conn.Read(response)
+	pingDuration := time.Since(pingStart)
+	ping := int(math.Ceil(float64(pingDuration.Nanoseconds()) / 1e6))
+	
 	if err != nil {
 		if opts.Debug {
 			debugLogf("Source", "Response read failed: %v", err)
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
-
-	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	if opts.Debug {
 		debugLogf("Source", "Received %d bytes response (ping: %dms)", n, ping)
@@ -105,7 +107,7 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 		if opts.Debug {
 			debugLogf("Source", "Challenge value: 0x%08x", challenge)
 		}
-		return s.queryWithChallenge(conn, addr, challenge, getTimeout(opts), start, opts)
+		return s.queryWithChallenge(conn, addr, challenge, getTimeout(opts), ping, opts)
 	}
 
 	// Check for A2S_INFO response
@@ -145,15 +147,15 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 			"app_id": fmt.Sprintf("%d", info.AppID),
 		},
 	}
-	
+
 	if opts.Debug {
-		debugLogf("Source", "Parsed server info - Name: '%s', Game: '%s', Map: '%s', Players: %d/%d", 
+		debugLogf("Source", "Parsed server info - Name: '%s', Game: '%s', Map: '%s', Players: %d/%d",
 			result.Name, info.Game, result.Map, result.Players.Current, result.Players.Max)
 	}
-	
+
 	// Use central game detector to set the game field
 	result.Game = DetectGameFromResponse(result, "source")
-	
+
 	if opts.Debug {
 		debugLogf("Source", "Detected game type: '%s'", result.Game)
 	}
@@ -183,7 +185,7 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	return result, nil
 }
 
-func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challenge uint32, timeout time.Duration, start time.Time, opts *Options) (*ServerInfo, error) {
+func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challenge uint32, timeout time.Duration, initialPing int, opts *Options) (*ServerInfo, error) {
 	// Build A2S_INFO request with challenge
 	request := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x54}
 	request = append(request, []byte("Source Engine Query\x00")...)
@@ -199,11 +201,13 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 	// Read response
 	response := make([]byte, 1400)
 	n, err := conn.Read(response)
+	
+	// Use the initial ping from the first request rather than measuring challenge exchange
+	ping := initialPing
+	
 	if err != nil {
 		return &ServerInfo{Online: false}, fmt.Errorf("read challenge response failed: %w", err)
 	}
-
-	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	if n < 5 || response[4] != 0x49 {
 		return &ServerInfo{Online: false}, fmt.Errorf("invalid challenge response")
@@ -231,7 +235,7 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 			"app_id": fmt.Sprintf("%d", info.AppID),
 		},
 	}
-	
+
 	// Use central game detector to set the game field
 	result.Game = DetectGameFromResponse(result, "source")
 
@@ -277,7 +281,7 @@ func (s *SourceProtocol) queryPlayers(conn net.Conn, addr string, timeout time.D
 			return nil, fmt.Errorf("player challenge too short")
 		}
 		challenge := binary.LittleEndian.Uint32(response[5:9])
-		
+
 		// Retry with challenge
 		request = []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x55}
 		challengeBytes = make([]byte, 4)
@@ -495,3 +499,4 @@ type A2SInfo struct {
 	VAC         uint8
 	Version     string
 }
+

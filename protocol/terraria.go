@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"regexp"
@@ -38,14 +39,13 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 	}
 	defer conn.Close()
 
-	start := time.Now()
-
 	// Try TShock REST API first (more reliable)
 	if opts.Debug {
 		debugLog("Terraria", "Trying TShock REST API first")
 	}
+	tshockStart := time.Now()
 	if info, err := t.queryTShockAPI(ctx, addr, getTimeout(opts)); err == nil {
-		info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
+		info.Ping = int(math.Ceil(float64(time.Since(tshockStart).Nanoseconds()) / 1e6))
 		if opts.Debug {
 			debugLog("Terraria", "TShock API query successful")
 		}
@@ -69,6 +69,9 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 		debugLogf("Terraria", "Sending server info request (%d bytes)", len(serverInfoPacket))
 	}
 
+	// Measure ping from request send to response receive
+	pingStart := time.Now()
+	
 	if _, err := conn.Write(serverInfoPacket); err != nil {
 		if opts.Debug {
 			debugLogf("Terraria", "Write failed: %v", err)
@@ -79,14 +82,15 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 	// Read response - could be any packet type
 	response := make([]byte, 1024)
 	n, err := conn.Read(response)
+	pingDuration := time.Since(pingStart)
+	ping := int(math.Ceil(float64(pingDuration.Nanoseconds()) / 1e6))
+	
 	if err != nil {
 		if opts.Debug {
 			debugLogf("Terraria", "Read failed: %v", err)
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
-
-	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
 	if opts.Debug {
 		debugLogf("Terraria", "Received %d bytes response (ping: %dms)", n, ping)

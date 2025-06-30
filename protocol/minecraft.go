@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // MinecraftProtocol implements the Minecraft Server List Ping protocol
@@ -70,10 +72,11 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 		return &ServerInfo{Online: false}, fmt.Errorf("handshake failed: %w", err)
 	}
 
-	// Send status request
+	// Send status request and measure ping
 	if opts.Debug {
 		debugLog("Minecraft", "Sending status request")
 	}
+	pingStart := time.Now()
 	if err := m.sendStatusRequest(conn); err != nil {
 		if opts.Debug {
 			debugLogf("Minecraft", "Status request failed: %v", err)
@@ -86,6 +89,12 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 		debugLog("Minecraft", "Reading server response")
 	}
 	responseData, err := m.readVarIntPrefixedData(conn)
+	pingDuration := time.Since(pingStart)
+	ping := int(math.Ceil(float64(pingDuration.Nanoseconds()) / 1e6))
+	
+	if opts.Debug {
+		debugLogf("Minecraft", "Ping calculation: %v -> %dms", pingDuration, ping)
+	}
 	if err != nil {
 		if opts.Debug {
 			debugLogf("Minecraft", "Response read failed: %v", err)
@@ -138,6 +147,7 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 		Name:    motd, // Use MOTD as the server name for Minecraft
 		Version: status.Version.Name,
 		Online:  true,
+		Ping:    ping,
 		Players: PlayerInfo{
 			Current: status.Players.Online,
 			Max:     status.Players.Max,

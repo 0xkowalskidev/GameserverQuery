@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -402,7 +403,11 @@ func (e *QueryEngine) queryWithServerInfo(ctx context.Context, proto protocol.Pr
 func (e *QueryEngine) setServerInfoFields(info *protocol.ServerInfo, host string, port int, start time.Time, protocolName string) {
 	info.Address = host
 	info.Port = port
-	info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
+	
+	// Only set ping if the protocol didn't provide one (ping == 0)
+	if info.Ping == 0 {
+		info.Ping = int(math.Ceil(float64(time.Since(start).Nanoseconds()) / 1e6))
+	}
 	
 	// Game detection is now handled by the protocols themselves
 }
@@ -470,12 +475,8 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 		debugLogf("Query", "Trying primary port %d with %s protocol", ports[0], proto.Name())
 	}
 	
-	// Use discovery timeout for primary query to avoid long waits when adjacent ports are available
-	primaryCtx, primaryCancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout*3) // Give it a bit more time than basic discovery
-	defer primaryCancel()
-	
-	primaryOptions := e.createDiscoveryOptions(req.Options)
-	info, err := e.queryWithServerInfo(primaryCtx, proto, host, ports[0], primaryOptions)
+	// Use normal timeout for primary query since it's the exact port requested
+	info, err := e.queryWithServerInfo(ctx, proto, host, ports[0], req.Options)
 	if err == nil && info.Online {
 		if req.Options.Debug {
 			debugLogf("Query", "SUCCESS on primary port %d", ports[0])

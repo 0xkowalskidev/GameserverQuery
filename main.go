@@ -290,12 +290,10 @@ func outputText(info *protocol.ServerInfo) error {
 	}
 	fmt.Printf("Address: %s:%d\n", info.Address, info.Port)
 	fmt.Printf("Players: %d/%d\n", info.Players.Current, info.Players.Max)
+	fmt.Printf("Ping: %d\n", info.Ping)
 
 	// Optional fields
 	printIfNotEmpty("Map", info.Map)
-	if info.Ping > 0 {
-		fmt.Printf("Ping: %d\n", info.Ping)
-	}
 	fmt.Printf("Online: %t\n", info.Online)
 
 	// Extra information
