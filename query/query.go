@@ -34,62 +34,29 @@ func Query(ctx context.Context, game, addr string, opts ...Option) (*protocol.Se
 	}
 
 	// Try the specified port first
-	start := time.Now()
-	fullAddr := net.JoinHostPort(host, strconv.Itoa(port))
-	info, err := proto.Query(ctx, fullAddr, options)
+	info, err := queryWithServerInfo(ctx, proto, host, port, options)
 	if err == nil && info.Online {
-		setServerInfoFields(info, host, port, start)
 		return info, nil
 	}
 
 	// If that failed, try adjacent ports (±3 ports)
 	const adjacentPortRange = 3
+	discoveryOptions := createDiscoveryOptions(options)
+	
 	for offset := 1; offset <= adjacentPortRange; offset++ {
 		// Try port + offset
 		testPort := port + offset
 		if testPort <= 65535 {
-			testAddr := net.JoinHostPort(host, strconv.Itoa(testPort))
-			
-			// Try all protocols on this port (like discovery does)
-			for _, p := range protocol.AllProtocols() {
-				start = time.Now()
-				discoveryOptions := *options
-				discoveryOptions.DiscoveryMode = true
-				info, err = p.Query(ctx, testAddr, &discoveryOptions)
-				if err == nil && info.Online {
-					setServerInfoFields(info, host, testPort, start)
-					return info, nil
-				}
+			if info, err := tryProtocolsOnPort(ctx, host, testPort, discoveryOptions); err == nil {
+				return info, nil
 			}
 		}
 
 		// Try port - offset
 		testPort = port - offset
 		if testPort >= 1024 {
-			discoveryOptions := *options
-			discoveryOptions.DiscoveryMode = true
-			
-			// Use the same logic as discovery
-			if hasActiveServer(ctx, host, testPort, &discoveryOptions) {
-				// Found a server, now query it properly to get details
-				testAddr := net.JoinHostPort(host, strconv.Itoa(testPort))
-				start = time.Now()
-				
-				// Try the requested protocol first
-				info, err = proto.Query(ctx, testAddr, &discoveryOptions)
-				if err == nil && info.Online {
-					setServerInfoFields(info, host, testPort, start)
-					return info, nil
-				}
-				
-				// If that fails, try all protocols to find the right one
-				for _, p := range protocol.AllProtocols() {
-					info, err = p.Query(ctx, testAddr, &discoveryOptions)
-					if err == nil && info.Online {
-						setServerInfoFields(info, host, testPort, start)
-						return info, nil
-					}
-				}
+			if info, err := tryProtocolsOnPort(ctx, host, testPort, discoveryOptions); err == nil {
+				return info, nil
 			}
 		}
 	}
@@ -132,11 +99,8 @@ func AutoDetect(ctx context.Context, addr string, opts ...Option) (*protocol.Ser
 				testPort = proto.DefaultPort()
 			}
 			
-			testAddr := net.JoinHostPort(host, strconv.Itoa(testPort))
-			start := time.Now()
-			info, err := proto.Query(ctx, testAddr, options)
+			info, err := queryWithServerInfo(ctx, proto, host, testPort, options)
 			if err == nil && info.Online {
-				setServerInfoFields(info, host, testPort, start)
 				return info, nil
 			}
 		}
@@ -469,28 +433,12 @@ func discoverPortsDynamically(ctx context.Context, host string, options *protoco
 
 // hasActiveServer checks if any protocol responds on the given port
 func hasActiveServer(ctx context.Context, host string, port int, options *protocol.Options) bool {
-	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	// Use discovery timeout for this check
+	checkCtx, cancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout)
+	defer cancel()
 	
-	// Try each protocol until one succeeds
-	for _, proto := range protocol.AllProtocols() {
-		// Use a short timeout context for this check
-		checkCtx, cancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout)
-		info, err := proto.Query(checkCtx, testAddr, options)
-		cancel()
-		
-		if err == nil && info.Online {
-			return true
-		}
-		
-		// Check if main context is cancelled
-		select {
-		case <-ctx.Done():
-			return false
-		default:
-		}
-	}
-	
-	return false
+	_, err := tryProtocolsOnPort(checkCtx, host, port, options)
+	return err == nil
 }
 
 // determinePortsToScan determines which ports to scan based on options and specified port
@@ -611,5 +559,52 @@ func WithMaxConcurrency(max int) Option {
 	return func(o *protocol.Options) {
 		o.MaxConcurrency = max
 	}
+}
+
+// tryProtocolsOnPort tries all protocols on a single port until one succeeds
+func tryProtocolsOnPort(ctx context.Context, host string, port int, options *protocol.Options) (*protocol.ServerInfo, error) {
+	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	
+	// Try each protocol until one succeeds
+	for _, proto := range protocol.AllProtocols() {
+		start := time.Now()
+		info, err := proto.Query(ctx, testAddr, options)
+		if err == nil && info.Online {
+			setServerInfoFields(info, host, port, start)
+			return info, nil
+		}
+		
+		// Check if main context is cancelled
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+	}
+	
+	return nil, fmt.Errorf("no responsive server found on port %d", port)
+}
+
+// queryWithServerInfo handles the common pattern of proto.Query + setServerInfoFields
+func queryWithServerInfo(ctx context.Context, proto protocol.Protocol, host string, port int, options *protocol.Options) (*protocol.ServerInfo, error) {
+	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	start := time.Now()
+	info, err := proto.Query(ctx, testAddr, options)
+	if err != nil {
+		return nil, err
+	}
+	
+	if info.Online {
+		setServerInfoFields(info, host, port, start)
+	}
+	
+	return info, nil
+}
+
+// createDiscoveryOptions standardizes discovery option setup
+func createDiscoveryOptions(baseOptions *protocol.Options) *protocol.Options {
+	discoveryOptions := *baseOptions
+	discoveryOptions.DiscoveryMode = true
+	return &discoveryOptions
 }
 
