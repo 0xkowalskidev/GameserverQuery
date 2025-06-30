@@ -107,6 +107,7 @@ func scanCmd() {
 		ports       = flag.String("ports", "", "Comma-separated list of ports to scan")
 		concurrency = flag.Int("concurrency", 10, "Maximum concurrent queries")
 		noProgress  = flag.Bool("no-progress", false, "Disable progress indicator")
+		debug       = flag.Bool("debug", false, "Enable debug logging")
 		help        = flag.Bool("help", false, "Show help")
 	)
 	flag.Parse()
@@ -134,6 +135,10 @@ func scanCmd() {
 	
 	if *players {
 		opts = append(opts, query.WithPlayers())
+	}
+	
+	if *debug {
+		opts = append(opts, query.WithDebug())
 	}
 
 	// Handle port options

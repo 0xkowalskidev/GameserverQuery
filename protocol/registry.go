@@ -56,6 +56,7 @@ type Options struct {
 	PortRange      []int // Custom ports to scan
 	MaxConcurrency int   // Maximum concurrent queries (0 = unlimited)
 	DiscoveryMode  bool  // Whether this is a discovery scan (uses shorter timeouts)
+	Debug          bool  // Enable debug logging
 }
 
 // Registry manages protocol registration

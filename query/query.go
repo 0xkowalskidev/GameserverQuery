@@ -127,9 +127,18 @@ func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*proto
 	if len(options.PortRange) > 0 || specifiedPort != 0 {
 		// Use provided ports as-is
 		portsToScan = determinePortsToScan(options, specifiedPort)
+		if options.Debug {
+			fmt.Printf("[DEBUG] Using specified ports: %v\n", portsToScan)
+		}
 	} else {
 		// Dynamic discovery mode
+		if options.Debug {
+			fmt.Printf("[DEBUG] Starting dynamic port discovery for %s\n", host)
+		}
 		portsToScan = discoverPortsDynamically(ctx, host, options)
+		if options.Debug {
+			fmt.Printf("[DEBUG] Dynamic discovery found ports: %v\n", portsToScan)
+		}
 	}
 
 	// Set up concurrency control
@@ -161,6 +170,9 @@ func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*proto
 				select {
 				case semaphore <- struct{}{}:
 				case <-ctx.Done():
+					if options.Debug {
+						fmt.Printf("[DEBUG] Context cancelled while waiting for semaphore on port %d\n", port)
+					}
 					return
 				}
 				
@@ -168,12 +180,21 @@ func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*proto
 				func() {
 					defer func() { <-semaphore }()
 					
+					if options.Debug {
+						fmt.Printf("[DEBUG] Trying protocol %s on port %d\n", proto.Name(), port)
+					}
+					
 					start := time.Now()
 					info, err := proto.Query(ctx, testAddr, options)
 					if err == nil && info.Online {
+						if options.Debug {
+							fmt.Printf("[DEBUG] SUCCESS: Found %s server on port %d (took %v)\n", proto.Name(), port, time.Since(start))
+						}
 						setServerInfoFields(info, host, port, start)
 						results <- result{info: info}
 						found = true
+					} else if options.Debug {
+						fmt.Printf("[DEBUG] FAIL: Protocol %s on port %d failed (took %v): %v\n", proto.Name(), port, time.Since(start), err)
 					}
 				}()
 				
@@ -227,9 +248,18 @@ func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan 
 	if len(options.PortRange) > 0 || specifiedPort != 0 {
 		// Use provided ports as-is
 		portsToScan = determinePortsToScan(options, specifiedPort)
+		if options.Debug {
+			fmt.Printf("[DEBUG] Using specified ports: %v\n", portsToScan)
+		}
 	} else {
 		// Dynamic discovery mode
+		if options.Debug {
+			fmt.Printf("[DEBUG] Starting dynamic port discovery for %s\n", host)
+		}
 		portsToScan = discoverPortsDynamically(ctx, host, options)
+		if options.Debug {
+			fmt.Printf("[DEBUG] Dynamic discovery found ports: %v\n", portsToScan)
+		}
 	}
 
 	// Set up concurrency control
@@ -375,8 +405,16 @@ func discoverPortsDynamically(ctx context.Context, host string, options *protoco
 		// Check the seed port and expand from there regardless of result
 		
 		// Scan the seed port itself
+		if options.Debug {
+			fmt.Printf("[DEBUG] Checking seed port %d\n", seedPort)
+		}
 		if hasActiveServer(ctx, host, seedPort, options) {
 			allPorts[seedPort] = true
+			if options.Debug {
+				fmt.Printf("[DEBUG] Found server on seed port %d\n", seedPort)
+			}
+		} else if options.Debug {
+			fmt.Printf("[DEBUG] No server on seed port %d\n", seedPort)
 		}
 		
 		// Scan upward from seed (always scan a few ports even if seed failed)
@@ -437,7 +475,20 @@ func hasActiveServer(ctx context.Context, host string, port int, options *protoc
 	checkCtx, cancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout)
 	defer cancel()
 	
+	if options.Debug {
+		fmt.Printf("[DEBUG] hasActiveServer: Checking port %d with %v timeout\n", port, protocol.DiscoveryTimeout)
+	}
+	
 	_, err := tryProtocolsOnPort(checkCtx, host, port, options)
+	
+	if options.Debug {
+		if err == nil {
+			fmt.Printf("[DEBUG] hasActiveServer: Port %d has active server\n", port)
+		} else {
+			fmt.Printf("[DEBUG] hasActiveServer: Port %d check failed: %v\n", port, err)
+		}
+	}
+	
 	return err == nil
 }
 
@@ -561,22 +612,46 @@ func WithMaxConcurrency(max int) Option {
 	}
 }
 
+// WithDebug enables debug logging
+func WithDebug() Option {
+	return func(o *protocol.Options) {
+		o.Debug = true
+	}
+}
+
 // tryProtocolsOnPort tries all protocols on a single port until one succeeds
 func tryProtocolsOnPort(ctx context.Context, host string, port int, options *protocol.Options) (*protocol.ServerInfo, error) {
 	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
 	
+	if options.Debug {
+		fmt.Printf("[DEBUG] tryProtocolsOnPort: Testing %s with %d protocols\n", testAddr, len(protocol.AllProtocols()))
+	}
+	
 	// Try each protocol until one succeeds
 	for _, proto := range protocol.AllProtocols() {
+		if options.Debug {
+			fmt.Printf("[DEBUG] tryProtocolsOnPort: Trying %s protocol on %s\n", proto.Name(), testAddr)
+		}
+		
 		start := time.Now()
 		info, err := proto.Query(ctx, testAddr, options)
+		
 		if err == nil && info.Online {
+			if options.Debug {
+				fmt.Printf("[DEBUG] tryProtocolsOnPort: SUCCESS with %s protocol (took %v)\n", proto.Name(), time.Since(start))
+			}
 			setServerInfoFields(info, host, port, start)
 			return info, nil
+		} else if options.Debug {
+			fmt.Printf("[DEBUG] tryProtocolsOnPort: FAILED with %s protocol (took %v): %v\n", proto.Name(), time.Since(start), err)
 		}
 		
 		// Check if main context is cancelled
 		select {
 		case <-ctx.Done():
+			if options.Debug {
+				fmt.Printf("[DEBUG] tryProtocolsOnPort: Context cancelled\n")
+			}
 			return nil, ctx.Err()
 		default:
 		}
