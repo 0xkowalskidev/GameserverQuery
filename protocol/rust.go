@@ -29,10 +29,8 @@ func (r *RustProtocol) Query(ctx context.Context, addr string, opts *Options) (*
 		return info, err
 	}
 	
-	// Ensure the game is identified as rust
-	if info.Online {
-		info.Game = "rust"
-	}
+	// Game field will be determined by central game detector
+	// No need to override here
 	
 	return info, nil
 }

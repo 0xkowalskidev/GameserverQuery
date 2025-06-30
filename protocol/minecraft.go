@@ -88,13 +88,13 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	
 	info := &ServerInfo{
 		Name:    motd, // Use MOTD as the server name for Minecraft
-		Game:    m.Name(),
 		Version: status.Version.Name,
 		Online:  true,
 		Players: PlayerInfo{
 			Current: status.Players.Online,
 			Max:     status.Players.Max,
 		},
+		// Game field will be set by central game detector
 	}
 
 	// Add player list if requested

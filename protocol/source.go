@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"strings"
 	"time"
 )
 
@@ -103,10 +102,13 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 			Max:     int(info.MaxPlayers),
 		},
 		Ping: ping,
+		// Store game description and App ID for central game detector
+		Extra: map[string]string{
+			"game":   info.Game,
+			"app_id": fmt.Sprintf("%d", info.AppID),
+		},
+		// Game field will be set by central game detector
 	}
-
-	// Determine specific game based on game description and App ID
-	result.Game = s.detectGameType(info.Game, info.AppID)
 
 	// Query players if requested
 	if opts.Players {
@@ -163,10 +165,13 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 			Max:     int(info.MaxPlayers),
 		},
 		Ping: ping,
+		// Store game description and App ID for central game detector
+		Extra: map[string]string{
+			"game":   info.Game,
+			"app_id": fmt.Sprintf("%d", info.AppID),
+		},
+		// Game field will be set by central game detector
 	}
-
-	// Determine specific game
-	result.Game = s.detectGameType(info.Game, info.AppID)
 
 	// Query players if requested
 	if opts.Players {
@@ -409,66 +414,7 @@ func (s *SourceProtocol) readNullTerminatedString(data []byte, offset int) (stri
 	return string(data[start:offset]), offset + 1, nil
 }
 
-// detectGameType determines the specific game based on game description and App ID
-func (s *SourceProtocol) detectGameType(gameDesc string, appID uint16) string {
-	gameLower := strings.ToLower(gameDesc)
-	
-	// Check by App ID first (most reliable)
-	// Note: Some newer games have App IDs that exceed uint16 range
-	switch appID {
-	case 730:
-		return "counter-strike"
-	case 240: 
-		return "counter-source"
-	case 4000:
-		return "garrys-mod"
-	case 440:
-		return "team-fortress-2"
-	case 550:
-		return "left-4-dead-2"
-	case 500:
-		return "left-4-dead"
-	case 320:
-		return "half-life"
-	case 300:
-		return "day-of-defeat-source"
-	// Note: Rust (252490), Ark (346110), Insurgency (222880), Project Zomboid (108600)
-	// have App IDs that exceed uint16 range - handled by string matching below
-	}
-	
-	// Fallback to string matching
-	if strings.Contains(gameLower, "counter-strike 2") {
-		return "counter-strike-2"
-	} else if strings.Contains(gameLower, "counter-strike: global offensive") {
-		return "counter-strike"
-	} else if strings.Contains(gameLower, "counter-strike") {
-		return "counter-strike"
-	} else if strings.Contains(gameLower, "garrysmod") || strings.Contains(gameLower, "garry") {
-		return "garrys-mod"
-	} else if strings.Contains(gameLower, "team fortress") {
-		return "team-fortress-2"
-	} else if strings.Contains(gameLower, "left 4 dead 2") {
-		return "left-4-dead-2"
-	} else if strings.Contains(gameLower, "left 4 dead") {
-		return "left-4-dead"
-	} else if strings.Contains(gameLower, "rust") {
-		return "rust"
-	} else if strings.Contains(gameLower, "ark") {
-		return "ark-survival-evolved"
-	} else if strings.Contains(gameLower, "insurgency") {
-		return "insurgency"
-	} else if strings.Contains(gameLower, "day of defeat") {
-		return "day-of-defeat"
-	} else if strings.Contains(gameLower, "project zomboid") {
-		return "project-zomboid"
-	} else if strings.Contains(gameLower, "satisfactory") {
-		return "satisfactory"
-	} else if strings.Contains(gameLower, "7 days to die") {
-		return "7-days-to-die"
-	}
-	
-	return "source"
-}
+// detectGameType has been moved to central game detector in gamedetector.go
 
 // A2SInfo represents the parsed A2S_INFO response
 type A2SInfo struct {

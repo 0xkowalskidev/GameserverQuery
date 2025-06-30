@@ -190,7 +190,7 @@ func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*proto
 						if options.Debug {
 							fmt.Printf("[DEBUG] SUCCESS: Found %s server on port %d (took %v)\n", proto.Name(), port, time.Since(start))
 						}
-						setServerInfoFields(info, host, port, start)
+						setServerInfoFields(info, host, port, start, proto.Name())
 						results <- result{info: info}
 						found = true
 					} else if options.Debug {
@@ -332,7 +332,7 @@ func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan 
 					completed++
 					if err == nil && info.Online {
 						serversFound++
-						setServerInfoFields(info, host, port, start)
+						setServerInfoFields(info, host, port, start, proto.Name())
 						results <- result{info: info}
 						found = true
 					}
@@ -760,12 +760,14 @@ func parseAddress(addr string, optPort, defaultPort int) (string, int, error) {
 	return host, port, nil
 }
 
-// setServerInfoFields sets common fields on ServerInfo
-func setServerInfoFields(info *protocol.ServerInfo, host string, port int, start time.Time) {
+// setServerInfoFields sets common fields on ServerInfo and detects the actual game
+func setServerInfoFields(info *protocol.ServerInfo, host string, port int, start time.Time, protocolName string) {
 	info.Address = host
 	info.Port = port
-	// Game field should be set by the protocol implementation, not here
 	info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
+	
+	// Use central game detection instead of protocol-specific logic
+	info.Game = protocol.DetectGameFromResponse(info, protocolName)
 }
 
 // DefaultOptions returns default query options
@@ -857,7 +859,7 @@ func tryProtocolsOnPort(ctx context.Context, host string, port int, options *pro
 			if options.Debug {
 				fmt.Printf("[DEBUG] tryProtocolsOnPort: SUCCESS with %s protocol (took %v)\n", proto.Name(), time.Since(start))
 			}
-			setServerInfoFields(info, host, port, start)
+			setServerInfoFields(info, host, port, start, proto.Name())
 			return info, nil
 		} else if options.Debug {
 			fmt.Printf("[DEBUG] tryProtocolsOnPort: FAILED with %s protocol (took %v): %v\n", proto.Name(), time.Since(start), err)
@@ -907,7 +909,7 @@ func queryWithServerInfo(ctx context.Context, proto protocol.Protocol, host stri
 	}
 	
 	if info.Online {
-		setServerInfoFields(info, host, port, start)
+		setServerInfoFields(info, host, port, start, proto.Name())
 	}
 	
 	return info, nil

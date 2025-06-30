@@ -49,6 +49,7 @@ func queryCmd() {
 		format     = flag.String("format", "text", "Output format (text, json)")
 		players    = flag.Bool("players", false, "Include player list")
 		game       = flag.String("game", "", "Game type (auto-detect if not specified)")
+		debug      = flag.Bool("debug", false, "Enable debug logging")
 		help       = flag.Bool("help", false, "Show help")
 	)
 	flag.Parse()
@@ -73,6 +74,9 @@ func queryCmd() {
 	var opts []query.Option
 	if *players {
 		opts = append(opts, query.WithPlayers())
+	}
+	if *debug {
+		opts = append(opts, query.WithDebug())
 	}
 
 	var info *protocol.ServerInfo
@@ -269,6 +273,7 @@ Options:
   -format string       Output format: text, json (default "text")  
   -players             Include player list
   -game string         Game type (minecraft, cs2, csgo, gmod, tf2, terraria, valheim, etc.)
+  -debug               Enable debug logging
   -help                Show this help
 
 Examples:
