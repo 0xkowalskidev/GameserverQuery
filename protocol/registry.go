@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"time"
 )
 
@@ -156,10 +157,25 @@ func getTimeout(opts *Options) time.Duration {
 func setupConnection(ctx context.Context, network, addr string, opts *Options) (net.Conn, error) {
 	timeout := getTimeout(opts)
 
+	if opts.Debug {
+		debugLogf("Connection", "Connecting to %s://%s with timeout %v (discovery mode: %v)", 
+			network, addr, timeout, opts.DiscoveryMode)
+	}
+
+	start := time.Now()
 	dialer := &net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, network, addr)
+	elapsed := time.Since(start)
+	
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Connection", "Connection to %s://%s FAILED: %v (took %v)", network, addr, err, elapsed)
+		}
 		return nil, fmt.Errorf("connection failed: %w", err)
+	}
+
+	if opts.Debug {
+		debugLogf("Connection", "Connection to %s://%s successful (took %v)", network, addr, elapsed)
 	}
 
 	// Set deadline based on context or timeout
@@ -169,5 +185,19 @@ func setupConnection(ctx context.Context, network, addr string, opts *Options) (
 	}
 	conn.SetDeadline(deadline)
 
+	if opts.Debug {
+		debugLogf("Connection", "Set deadline for %s://%s to %v", network, addr, deadline)
+	}
+
 	return conn, nil
+}
+
+// Debug logging helpers
+func debugLog(component, message string) {
+	fmt.Fprintf(os.Stderr, "[DEBUG %s] %s: %s\n", time.Now().Format("15:04:05.000"), component, message)
+}
+
+func debugLogf(component, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	debugLog(component, message)
 }

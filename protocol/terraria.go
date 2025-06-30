@@ -28,6 +28,10 @@ func (t *TerrariaProtocol) DefaultPort() int {
 }
 
 func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
+	if opts.Debug {
+		debugLogf("Terraria", "Starting query for %s", addr)
+	}
+	
 	conn, err := setupConnection(ctx, "tcp", addr, opts)
 	if err != nil {
 		return &ServerInfo{Online: false}, err
@@ -37,19 +41,38 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 	start := time.Now()
 
 	// Try TShock REST API first (more reliable)
+	if opts.Debug {
+		debugLog("Terraria", "Trying TShock REST API first")
+	}
 	if info, err := t.queryTShockAPI(ctx, addr, getTimeout(opts)); err == nil {
 		info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
+		if opts.Debug {
+			debugLog("Terraria", "TShock API query successful")
+		}
 		return info, nil
+	} else if opts.Debug {
+		debugLogf("Terraria", "TShock API query failed: %v", err)
 	}
 
 	// Fallback to native protocol
+	if opts.Debug {
+		debugLog("Terraria", "Fallback to native TCP protocol")
+	}
+	
 	// Send server info request packet
 	serverInfoPacket := []byte{
 		0x05, 0x00, 0x00, 0x00, // Length: 5 bytes (excluding length field)
 		0x01, // Packet type: Server Info Request
 	}
 
+	if opts.Debug {
+		debugLogf("Terraria", "Sending server info request (%d bytes)", len(serverInfoPacket))
+	}
+
 	if _, err := conn.Write(serverInfoPacket); err != nil {
+		if opts.Debug {
+			debugLogf("Terraria", "Write failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("write server info request failed: %w", err)
 	}
 
@@ -57,18 +80,31 @@ func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options
 	response := make([]byte, 1024)
 	n, err := conn.Read(response)
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Terraria", "Read failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
 	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
+	if opts.Debug {
+		debugLogf("Terraria", "Received %d bytes response (ping: %dms)", n, ping)
+	}
+
 	// Parse whatever response we get
 	info, err := t.parseResponse(response[:n])
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Terraria", "Response parsing failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("parse failed: %w", err)
 	}
 
 	info.Ping = ping
+	if opts.Debug {
+		debugLog("Terraria", "Query completed successfully")
+	}
 	return info, nil
 }
 

@@ -42,6 +42,10 @@ func (s *SourceProtocol) DefaultPort() int {
 }
 
 func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
+	if opts.Debug {
+		debugLogf("Source", "Starting query for %s", addr)
+	}
+	
 	conn, err := setupConnection(ctx, "udp", addr, opts)
 	if err != nil {
 		return &ServerInfo{Online: false}, err
@@ -54,8 +58,15 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	request := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x54}
 	request = append(request, []byte("Source Engine Query\x00")...)
 
+	if opts.Debug {
+		debugLogf("Source", "Sending A2S_INFO request (%d bytes)", len(request))
+	}
+
 	// Send request
 	if _, err := conn.Write(request); err != nil {
+		if opts.Debug {
+			debugLogf("Source", "Request write failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("write failed: %w", err)
 	}
 
@@ -63,32 +74,58 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	response := make([]byte, 1400)
 	n, err := conn.Read(response)
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Source", "Response read failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
 	ping := int(time.Since(start).Nanoseconds() / 1e6)
 
+	if opts.Debug {
+		debugLogf("Source", "Received %d bytes response (ping: %dms)", n, ping)
+	}
+
 	if n < 5 {
+		if opts.Debug {
+			debugLogf("Source", "Response too short (%d bytes)", n)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("response too short")
 	}
 
 	// Check for challenge response
 	if response[4] == 0x41 { // Challenge response
+		if opts.Debug {
+			debugLog("Source", "Received challenge response")
+		}
 		if n < 9 {
 			return &ServerInfo{Online: false}, fmt.Errorf("challenge response too short")
 		}
 		challenge := binary.LittleEndian.Uint32(response[5:9])
+		if opts.Debug {
+			debugLogf("Source", "Challenge value: 0x%08x", challenge)
+		}
 		return s.queryWithChallenge(conn, addr, challenge, getTimeout(opts), start, opts)
 	}
 
 	// Check for A2S_INFO response
 	if response[4] != 0x49 {
+		if opts.Debug {
+			debugLogf("Source", "Unexpected response type: 0x%02x (expected 0x49)", response[4])
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("unexpected response type: %02x", response[4])
+	}
+
+	if opts.Debug {
+		debugLog("Source", "Parsing A2S_INFO response")
 	}
 
 	// Parse A2S_INFO response
 	info, err := s.parseA2SInfoResponse(response[5:n])
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Source", "Response parsing failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("parse failed: %w", err)
 	}
 
@@ -109,19 +146,40 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 		},
 	}
 	
+	if opts.Debug {
+		debugLogf("Source", "Parsed server info - Name: '%s', Game: '%s', Map: '%s', Players: %d/%d", 
+			result.Name, info.Game, result.Map, result.Players.Current, result.Players.Max)
+	}
+	
 	// Use central game detector to set the game field
 	result.Game = DetectGameFromResponse(result, "source")
+	
+	if opts.Debug {
+		debugLogf("Source", "Detected game type: '%s'", result.Game)
+	}
 
 	// Query players if requested
 	if opts.Players {
+		if opts.Debug {
+			debugLog("Source", "Querying player list")
+		}
 		players, err := s.queryPlayers(conn, addr, getTimeout(opts))
 		if err == nil {
 			result.Players.List = players
+			if opts.Debug {
+				debugLogf("Source", "Retrieved %d players", len(players))
+			}
 		} else {
+			if opts.Debug {
+				debugLogf("Source", "Player query failed: %v", err)
+			}
 			result.Players.List = make([]Player, 0)
 		}
 	}
 
+	if opts.Debug {
+		debugLog("Source", "Query completed successfully")
+	}
 	return result, nil
 }
 

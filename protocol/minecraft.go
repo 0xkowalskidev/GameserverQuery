@@ -28,6 +28,10 @@ func (m *MinecraftProtocol) DefaultPort() int {
 }
 
 func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
+	if opts.Debug {
+		debugLogf("Minecraft", "Starting query for %s", addr)
+	}
+	
 	conn, err := setupConnection(ctx, "tcp", addr, opts)
 	if err != nil {
 		return &ServerInfo{Online: false}, err
@@ -37,28 +41,60 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	// Parse host and port for handshake
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Minecraft", "Address parsing failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("invalid address: %w", err)
 	}
 	
 	port, err := strconv.Atoi(portStr)
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Minecraft", "Port parsing failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("invalid port: %w", err)
+	}
+	
+	if opts.Debug {
+		debugLogf("Minecraft", "Parsed address - host: %s, port: %d", host, port)
 	}
 
 	// Send handshake packet
+	if opts.Debug {
+		debugLog("Minecraft", "Sending handshake packet")
+	}
 	if err := m.sendHandshake(conn, host, port); err != nil {
+		if opts.Debug {
+			debugLogf("Minecraft", "Handshake failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("handshake failed: %w", err)
 	}
 
 	// Send status request
+	if opts.Debug {
+		debugLog("Minecraft", "Sending status request")
+	}
 	if err := m.sendStatusRequest(conn); err != nil {
+		if opts.Debug {
+			debugLogf("Minecraft", "Status request failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("status request failed: %w", err)
 	}
 
 	// Read response
+	if opts.Debug {
+		debugLog("Minecraft", "Reading server response")
+	}
 	responseData, err := m.readVarIntPrefixedData(conn)
 	if err != nil {
+		if opts.Debug {
+			debugLogf("Minecraft", "Response read failed: %v", err)
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("read response failed: %w", err)
+	}
+	
+	if opts.Debug {
+		debugLogf("Minecraft", "Received %d bytes of response data", len(responseData))
 	}
 
 	// Skip packet ID
@@ -79,12 +115,24 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	}
 
 	// Parse JSON response
+	if opts.Debug {
+		debugLogf("Minecraft", "Parsing JSON response (%d bytes)", len(jsonData))
+	}
 	var status MinecraftStatus
 	if err := json.Unmarshal(jsonData, &status); err != nil {
+		if opts.Debug {
+			debugLogf("Minecraft", "JSON parsing failed: %v", err)
+			debugLogf("Minecraft", "Raw JSON data: %s", string(jsonData))
+		}
 		return &ServerInfo{Online: false}, fmt.Errorf("failed to parse JSON: %w", err)
 	}
 
 	motd := m.cleanMotd(status.Description)
+	
+	if opts.Debug {
+		debugLogf("Minecraft", "Parsed server info - MOTD: '%s', Version: '%s', Players: %d/%d", 
+			motd, status.Version.Name, status.Players.Online, status.Players.Max)
+	}
 	
 	info := &ServerInfo{
 		Name:    motd, // Use MOTD as the server name for Minecraft
@@ -102,15 +150,24 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	// Add player list if requested
 	if opts.Players {
 		if status.Players.Sample != nil {
+			if opts.Debug {
+				debugLogf("Minecraft", "Adding %d players to player list", len(status.Players.Sample))
+			}
 			info.Players.List = make([]Player, len(status.Players.Sample))
 			for i, player := range status.Players.Sample {
 				info.Players.List[i] = Player{Name: player.Name}
 			}
 		} else {
+			if opts.Debug {
+				debugLog("Minecraft", "No player sample available")
+			}
 			info.Players.List = make([]Player, 0)
 		}
 	}
 
+	if opts.Debug {
+		debugLog("Minecraft", "Query completed successfully")
+	}
 	return info, nil
 }
 

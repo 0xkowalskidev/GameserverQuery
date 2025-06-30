@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -141,19 +142,40 @@ func (s *DiscoveryPortStrategy) discoverPortsDynamically(ctx context.Context, ho
 	const minPort = 1024
 	const maxPort = 65535
 
+	if options.Debug {
+		debugLogf("Discovery", "Starting dynamic port discovery for %s", host)
+		debugLogf("Discovery", "Port range %d-%d, dead port threshold %d", minPort, maxPort, deadPortThreshold)
+	}
+
 	// Get unique default ports as seeds
 	seedPorts := make(map[int]bool)
 	for _, proto := range protocol.AllProtocols() {
 		seedPorts[proto.DefaultPort()] = true
 	}
 
+	if options.Debug {
+		debugLogf("Discovery", "Found %d unique seed ports from protocols", len(seedPorts))
+		seedList := make([]int, 0, len(seedPorts))
+		for port := range seedPorts {
+			seedList = append(seedList, port)
+		}
+		debugLogf("Discovery", "Seed ports: %v", seedList)
+	}
+
 	allPorts := make(map[int]bool)
 	
 	// For each unique seed port, expand outward
 	for seedPort := range seedPorts {
+		if options.Debug {
+			debugLogf("Discovery", "Checking seed port %d", seedPort)
+		}
+		
 		// Check the seed port itself
 		if s.hasActiveServer(ctx, host, seedPort, options) {
 			allPorts[seedPort] = true
+			if options.Debug {
+				debugLogf("Discovery", "Seed port %d has active server", seedPort)
+			}
 		}
 		
 		// Scan upward from seed
@@ -201,6 +223,10 @@ func (s *DiscoveryPortStrategy) discoverPortsDynamically(ctx context.Context, ho
 		ports = append(ports, port)
 	}
 	
+	if options.Debug {
+		debugLogf("Discovery", "Discovered %d active ports: %v", len(ports), ports)
+	}
+	
 	return ports
 }
 
@@ -209,21 +235,42 @@ func (s *DiscoveryPortStrategy) hasActiveServer(ctx context.Context, host string
 	checkCtx, cancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout)
 	defer cancel()
 	
-	// Fast path: try a simple TCP connection first
+	start := time.Now()
 	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	
+	if options.Debug {
+		debugLogf("Discovery", "Checking %s for active server", testAddr)
+	}
+	
+	// Fast path: try a simple TCP connection first
 	conn, err := net.DialTimeout("tcp", testAddr, protocol.DiscoveryTimeout/2)
 	if err == nil {
 		conn.Close()
+		if options.Debug {
+			debugLogf("Discovery", "TCP connection successful to %s, checking protocols", testAddr)
+		}
 		// Something is listening, now check protocols
 		engine := NewQueryEngine()
 		_, err := engine.tryProtocolsOnPort(checkCtx, host, port, options)
-		return err == nil
+		result := err == nil
+		if options.Debug {
+			debugLogf("Discovery", "Protocol check on %s: %v (took %v)", testAddr, result, time.Since(start))
+		}
+		return result
+	}
+	
+	if options.Debug {
+		debugLogf("Discovery", "TCP connection failed to %s, trying UDP protocols", testAddr)
 	}
 	
 	// TCP failed, maybe it's UDP only - try protocols directly  
 	engine := NewQueryEngine()
 	_, err = engine.tryProtocolsOnPort(checkCtx, host, port, options)
-	return err == nil
+	result := err == nil
+	if options.Debug {
+		debugLogf("Discovery", "UDP protocol check on %s: %v (took %v)", testAddr, result, time.Since(start))
+	}
+	return result
 }
 
 // SingleProtocolStrategy selects a single specific protocol
@@ -277,7 +324,7 @@ func (e *QueryEngine) tryProtocolsOnPort(ctx context.Context, host string, port 
 	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
 	
 	if options.Debug {
-		fmt.Printf("[DEBUG] tryProtocolsOnPort: Testing %s with %d protocols\n", testAddr, len(protocol.AllProtocols()))
+		debugLogf("Engine", "Testing %s with %d protocols", testAddr, len(protocol.AllProtocols()))
 	}
 	
 	// Get protocols in order of likelihood for this port
@@ -287,7 +334,7 @@ func (e *QueryEngine) tryProtocolsOnPort(ctx context.Context, host string, port 
 	// Try each protocol until one succeeds
 	for _, proto := range protocolsToTry {
 		if options.Debug {
-			fmt.Printf("[DEBUG] tryProtocolsOnPort: Trying %s protocol on %s\n", proto.Name(), testAddr)
+			debugLogf("Engine", "Trying %s protocol on %s", proto.Name(), testAddr)
 		}
 		
 		start := time.Now()
@@ -295,19 +342,19 @@ func (e *QueryEngine) tryProtocolsOnPort(ctx context.Context, host string, port 
 		
 		if err == nil && info.Online {
 			if options.Debug {
-				fmt.Printf("[DEBUG] tryProtocolsOnPort: SUCCESS with %s protocol (took %v)\n", proto.Name(), time.Since(start))
+				debugLogf("Engine", "SUCCESS with %s protocol (took %v)", proto.Name(), time.Since(start))
 			}
 			e.setServerInfoFields(info, host, port, start, proto.Name())
 			return info, nil
 		} else if options.Debug {
-			fmt.Printf("[DEBUG] tryProtocolsOnPort: FAILED with %s protocol (took %v): %v\n", proto.Name(), time.Since(start), err)
+			debugLogf("Engine", "FAILED with %s protocol (took %v): %v", proto.Name(), time.Since(start), err)
 		}
 		
 		// Check if main context is cancelled
 		select {
 		case <-ctx.Done():
 			if options.Debug {
-				fmt.Printf("[DEBUG] tryProtocolsOnPort: Context cancelled\n")
+				debugLog("Engine", "Context cancelled")
 			}
 			return nil, ctx.Err()
 		default:
@@ -321,13 +368,31 @@ func (e *QueryEngine) tryProtocolsOnPort(ctx context.Context, host string, port 
 func (e *QueryEngine) queryWithServerInfo(ctx context.Context, proto protocol.Protocol, host string, port int, options *protocol.Options) (*protocol.ServerInfo, error) {
 	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
 	start := time.Now()
+	
+	if options.Debug {
+		debugLogf("Engine", "Querying %s with %s protocol", testAddr, proto.Name())
+	}
+	
 	info, err := proto.Query(ctx, testAddr, options)
+	elapsed := time.Since(start)
+	
 	if err != nil {
+		if options.Debug {
+			debugLogf("Engine", "Query failed for %s (%s): %v (took %v)", testAddr, proto.Name(), err, elapsed)
+		}
 		return nil, err
 	}
 	
 	if info.Online {
 		e.setServerInfoFields(info, host, port, start, proto.Name())
+		if options.Debug {
+			debugLogf("Engine", "Query successful for %s (%s): online=%v, players=%d/%d (took %v)", 
+				testAddr, proto.Name(), info.Online, info.Players.Current, info.Players.Max, elapsed)
+		}
+	} else {
+		if options.Debug {
+			debugLogf("Engine", "Server %s (%s) is offline (took %v)", testAddr, proto.Name(), elapsed)
+		}
 	}
 	
 	return info, nil
@@ -364,15 +429,29 @@ func (e *QueryEngine) Execute(ctx context.Context, req *QueryRequest) *QueryResu
 }
 
 func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest) *QueryResult {
+	if req.Options.Debug {
+		debugLogf("Query", "Starting single query for game '%s' at address '%s'", req.Game, req.Address)
+	}
+	
 	proto, exists := protocol.GetProtocol(req.Game)
 	if !exists {
+		if req.Options.Debug {
+			debugLogf("Query", "Unsupported game protocol: %s", req.Game)
+		}
 		return &QueryResult{Error: fmt.Errorf("unsupported game: %s", req.Game)}
 	}
 
 	// Parse address and determine port
 	host, port, err := parseAddress(req.Address, req.Options.Port, proto.DefaultPort())
 	if err != nil {
+		if req.Options.Debug {
+			debugLogf("Query", "Address parsing failed: %v", err)
+		}
 		return &QueryResult{Error: fmt.Errorf("invalid address: %w", err)}
+	}
+	
+	if req.Options.Debug {
+		debugLogf("Query", "Parsed address - host: %s, port: %d, protocol: %s", host, port, proto.Name())
 	}
 
 	// Create port discovery strategy
@@ -387,27 +466,58 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 	}
 
 	// Try the specified port first
+	if req.Options.Debug {
+		debugLogf("Query", "Trying primary port %d with %s protocol", ports[0], proto.Name())
+	}
 	info, err := e.queryWithServerInfo(ctx, proto, host, ports[0], req.Options)
 	if err == nil && info.Online {
+		if req.Options.Debug {
+			debugLogf("Query", "SUCCESS on primary port %d", ports[0])
+		}
 		return &QueryResult{Servers: []*protocol.ServerInfo{info}}
+	}
+	
+	if req.Options.Debug {
+		debugLogf("Query", "Primary port %d failed: %v", ports[0], err)
+		debugLogf("Query", "Trying %d adjacent ports with protocol detection", len(ports)-1)
 	}
 
 	// If that failed, try adjacent ports
 	discoveryOptions := e.createDiscoveryOptions(req.Options)
 	
-	for _, testPort := range ports[1:] {
+	for i, testPort := range ports[1:] {
+		if req.Options.Debug {
+			debugLogf("Query", "Trying adjacent port %d (%d/%d)", testPort, i+1, len(ports)-1)
+		}
 		if info, err := e.tryProtocolsOnPort(ctx, host, testPort, discoveryOptions); err == nil {
+			if req.Options.Debug {
+				debugLogf("Query", "SUCCESS on adjacent port %d", testPort)
+			}
 			return &QueryResult{Servers: []*protocol.ServerInfo{info}}
 		}
 	}
 
+	if req.Options.Debug {
+		debugLog("Query", "All ports failed, no responsive server found")
+	}
 	return &QueryResult{Error: fmt.Errorf("no responsive server found at %s or adjacent ports", req.Address)}
 }
 
 func (e *QueryEngine) executeAutoDetectQuery(ctx context.Context, req *QueryRequest) *QueryResult {
+	if req.Options.Debug {
+		debugLogf("AutoDetect", "Starting auto-detection for address '%s'", req.Address)
+	}
+	
 	host, port, err := parseAddress(req.Address, req.Options.Port, 0)
 	if err != nil {
+		if req.Options.Debug {
+			debugLogf("AutoDetect", "Address parsing failed: %v", err)
+		}
 		return &QueryResult{Error: fmt.Errorf("invalid address: %w", err)}
+	}
+	
+	if req.Options.Debug {
+		debugLogf("AutoDetect", "Parsed address - host: %s, port: %d", host, port)
 	}
 
 	// If port is specified, try to match it to a known default port first
@@ -415,10 +525,23 @@ func (e *QueryEngine) executeAutoDetectQuery(ctx context.Context, req *QueryRequ
 		// Get protocols ordered by likelihood for this specific port
 		protocolsForPort := e.getProtocolsByPortPreference(port)
 		
-		for _, proto := range protocolsForPort {
+		if req.Options.Debug {
+			debugLogf("AutoDetect", "Port %d specified, trying %d matching protocols first", port, len(protocolsForPort))
+		}
+		
+		for i, proto := range protocolsForPort {
+			if req.Options.Debug {
+				debugLogf("AutoDetect", "Trying protocol %s on port %d (%d/%d)", proto.Name(), port, i+1, len(protocolsForPort))
+			}
 			info, err := e.queryWithServerInfo(ctx, proto, host, port, req.Options)
 			if err == nil && info.Online {
+				if req.Options.Debug {
+					debugLogf("AutoDetect", "SUCCESS with %s on port %d", proto.Name(), port)
+				}
 				return &QueryResult{Servers: []*protocol.ServerInfo{info}}
+			}
+			if req.Options.Debug {
+				debugLogf("AutoDetect", "FAILED with %s on port %d: %v", proto.Name(), port, err)
 			}
 		}
 	}
@@ -426,18 +549,35 @@ func (e *QueryEngine) executeAutoDetectQuery(ctx context.Context, req *QueryRequ
 	// Try all protocols on their default ports, ordered by popularity
 	popularityOrder := e.getProtocolsByPopularity()
 	
-	for _, proto := range popularityOrder {
+	if req.Options.Debug {
+		debugLogf("AutoDetect", "Trying %d protocols on their default ports", len(popularityOrder))
+	}
+	
+	for i, proto := range popularityOrder {
 		testPort := port
 		if testPort == 0 {
 			testPort = proto.DefaultPort()
 		}
 		
+		if req.Options.Debug {
+			debugLogf("AutoDetect", "Trying protocol %s on default port %d (%d/%d)", proto.Name(), testPort, i+1, len(popularityOrder))
+		}
+		
 		info, err := e.queryWithServerInfo(ctx, proto, host, testPort, req.Options)
 		if err == nil && info.Online {
+			if req.Options.Debug {
+				debugLogf("AutoDetect", "SUCCESS with %s on default port %d", proto.Name(), testPort)
+			}
 			return &QueryResult{Servers: []*protocol.ServerInfo{info}}
+		}
+		if req.Options.Debug {
+			debugLogf("AutoDetect", "FAILED with %s on default port %d: %v", proto.Name(), testPort, err)
 		}
 	}
 
+	if req.Options.Debug {
+		debugLog("AutoDetect", "All protocols failed, no responsive server found")
+	}
 	return &QueryResult{Error: fmt.Errorf("no responsive server found at %s", req.Address)}
 }
 
@@ -491,9 +631,20 @@ func (e *QueryEngine) getProtocolsByPopularity() []protocol.Protocol {
 }
 
 func (e *QueryEngine) executeDiscoveryQuery(ctx context.Context, req *QueryRequest) *QueryResult {
+	if req.Options.Debug {
+		debugLogf("Discovery", "Starting server discovery for address '%s'", req.Address)
+	}
+	
 	host, specifiedPort, err := parseAddress(req.Address, req.Options.Port, 0)
 	if err != nil {
+		if req.Options.Debug {
+			debugLogf("Discovery", "Address parsing failed: %v", err)
+		}
 		return &QueryResult{Error: fmt.Errorf("invalid address: %w", err)}
+	}
+	
+	if req.Options.Debug {
+		debugLogf("Discovery", "Parsed address - host: %s, port: %d", host, specifiedPort)
 	}
 
 	// Create port discovery strategy
@@ -502,9 +653,26 @@ func (e *QueryEngine) executeDiscoveryQuery(ctx context.Context, req *QueryReque
 		PortRange:     req.Options.PortRange,
 	}
 	
+	if req.Options.Debug {
+		if len(req.Options.PortRange) > 0 {
+			debugLogf("Discovery", "Using custom port range: %v", req.Options.PortRange)
+		} else if specifiedPort != 0 {
+			debugLogf("Discovery", "Using specified port: %d", specifiedPort)
+		} else {
+			debugLog("Discovery", "Using dynamic port discovery")
+		}
+	}
+	
 	portsToScan, err := strategy.GetPorts(ctx, host, req.Options)
 	if err != nil {
+		if req.Options.Debug {
+			debugLogf("Discovery", "Port discovery failed: %v", err)
+		}
 		return &QueryResult{Error: err}
+	}
+	
+	if req.Options.Debug {
+		debugLogf("Discovery", "Will scan %d ports: %v", len(portsToScan), portsToScan)
 	}
 
 	// Set up concurrency control
@@ -513,6 +681,10 @@ func (e *QueryEngine) executeDiscoveryQuery(ctx context.Context, req *QueryReque
 		maxConcurrency = len(portsToScan) * len(protocol.AllProtocols())
 	}
 	semaphore := make(chan struct{}, maxConcurrency)
+	
+	if req.Options.Debug {
+		debugLogf("Discovery", "Using concurrency limit: %d", maxConcurrency)
+	}
 
 	// Results channel and wait group
 	type result struct {
@@ -605,5 +777,19 @@ func (e *QueryEngine) executeDiscoveryQuery(ctx context.Context, req *QueryReque
 		}
 	}
 
+	if req.Options.Debug {
+		debugLogf("Discovery", "Discovery complete, found %d servers", len(servers))
+	}
+
 	return &QueryResult{Servers: servers}
+}
+
+// Debug logging helpers for query package
+func debugLog(component, message string) {
+	fmt.Fprintf(os.Stderr, "[DEBUG %s] %s: %s\n", time.Now().Format("15:04:05.000"), component, message)
+}
+
+func debugLogf(component, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	debugLog(component, message)
 }
