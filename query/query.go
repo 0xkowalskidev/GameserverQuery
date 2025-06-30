@@ -252,11 +252,22 @@ func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan 
 			fmt.Printf("[DEBUG] Using specified ports: %v\n", portsToScan)
 		}
 	} else {
-		// Dynamic discovery mode
+		// Dynamic discovery mode with progress tracking
 		if options.Debug {
 			fmt.Printf("[DEBUG] Starting dynamic port discovery for %s\n", host)
 		}
-		portsToScan = discoverPortsDynamically(ctx, host, options)
+		
+		if progressChan != nil {
+			// Send initial discovery progress
+			progressChan <- ScanProgress{
+				TotalPorts:     0, // Unknown at this point
+				TotalProtocols: len(protocol.AllProtocols()),
+				Completed:      0,
+				ServersFound:   0,
+			}
+		}
+		
+		portsToScan = discoverPortsDynamicallyWithProgress(ctx, host, options, progressChan)
 		if options.Debug {
 			fmt.Printf("[DEBUG] Dynamic discovery found ports: %v\n", portsToScan)
 		}
@@ -382,6 +393,125 @@ func DefaultPort(game string) int {
 		return proto.DefaultPort()
 	}
 	return 0
+}
+
+// discoverPortsDynamicallyWithProgress expands from default ports and reports progress
+func discoverPortsDynamicallyWithProgress(ctx context.Context, host string, options *protocol.Options, progressChan chan<- ScanProgress) []int {
+	const deadPortThreshold = 3 // Stop after 3 consecutive ports with no servers
+	const minPort = 1024        // Don't scan below this
+	const maxPort = 65535       // Don't scan above this
+
+	// Get unique default ports as seeds (avoid duplicate scanning)
+	seedPorts := make(map[int]bool)
+	for _, proto := range protocol.AllProtocols() {
+		seedPorts[proto.DefaultPort()] = true
+	}
+	
+	// Track all ports we'll scan (to avoid duplicate scanning)
+	allPorts := make(map[int]bool)
+	var portsChecked, serversFound int
+	
+	// For each unique seed port, expand outward
+	for seedPort := range seedPorts {
+		// Check the seed port and expand from there regardless of result
+		
+		// Scan the seed port itself
+		if options.Debug {
+			fmt.Printf("[DEBUG] Checking seed port %d\n", seedPort)
+		}
+		
+		portsChecked++
+		if progressChan != nil {
+			progressChan <- ScanProgress{
+				TotalPorts:     0, // Still discovering
+				TotalProtocols: len(protocol.AllProtocols()),
+				Completed:      portsChecked,
+				ServersFound:   serversFound,
+			}
+		}
+		
+		if hasActiveServer(ctx, host, seedPort, options) {
+			allPorts[seedPort] = true
+			serversFound++
+			if options.Debug {
+				fmt.Printf("[DEBUG] Found server on seed port %d\n", seedPort)
+			}
+		} else if options.Debug {
+			fmt.Printf("[DEBUG] No server on seed port %d\n", seedPort)
+		}
+		
+		// Scan upward from seed (always scan a few ports even if seed failed)
+		consecutiveFailures := 0
+		for port := seedPort + 1; port <= maxPort; port++ {
+			// Skip if we've already checked this port from another seed
+			if allPorts[port] {
+				consecutiveFailures = 0 // Reset since we know there's a server here
+				continue
+			}
+			
+			portsChecked++
+			if progressChan != nil {
+				progressChan <- ScanProgress{
+					TotalPorts:     0, // Still discovering
+					TotalProtocols: len(protocol.AllProtocols()),
+					Completed:      portsChecked,
+					ServersFound:   serversFound,
+				}
+			}
+			
+			// Quick check if any protocol responds on this port
+			if hasActiveServer(ctx, host, port, options) {
+				allPorts[port] = true
+				serversFound++
+				consecutiveFailures = 0
+			} else {
+				consecutiveFailures++
+				if consecutiveFailures >= deadPortThreshold {
+					break
+				}
+			}
+		}
+		
+		// Scan downward from seed (always scan a few ports even if seed failed)
+		consecutiveFailures = 0
+		for port := seedPort - 1; port >= minPort; port-- {
+			// Skip if we've already checked this port from another seed
+			if allPorts[port] {
+				consecutiveFailures = 0 // Reset since we know there's a server here
+				continue
+			}
+			
+			portsChecked++
+			if progressChan != nil {
+				progressChan <- ScanProgress{
+					TotalPorts:     0, // Still discovering
+					TotalProtocols: len(protocol.AllProtocols()),
+					Completed:      portsChecked,
+					ServersFound:   serversFound,
+				}
+			}
+			
+			if hasActiveServer(ctx, host, port, options) {
+				allPorts[port] = true
+				serversFound++
+				consecutiveFailures = 0
+			} else {
+				consecutiveFailures++
+				if consecutiveFailures >= deadPortThreshold {
+					break
+				}
+			}
+		}
+	}
+	
+	// Convert map to sorted slice
+	var ports []int
+	for port := range allPorts {
+		ports = append(ports, port)
+	}
+	sort.Ints(ports)
+	
+	return ports
 }
 
 // discoverPortsDynamically expands from default ports to find clusters of game servers

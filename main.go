@@ -176,20 +176,31 @@ func scanCmd() {
 			defer close(progressDone)
 			
 			for progress := range progressChan {
-				totalScans := progress.TotalPorts * progress.TotalProtocols
-				remaining := totalScans - progress.Completed
-				percentage := 0
-				if totalScans > 0 {
-					percentage = (progress.Completed * 100) / totalScans
+				if progress.TotalPorts == 0 {
+					// Discovery phase - show ports being checked
+					fmt.Fprintf(os.Stderr, "\r\033[KDiscovering ports... Checked %d ports, found %d server(s)", 
+						progress.Completed, progress.ServersFound)
+				} else {
+					// Final scanning phase - show percentage
+					totalScans := progress.TotalPorts * progress.TotalProtocols
+					remaining := totalScans - progress.Completed
+					percentage := 0
+					if totalScans > 0 {
+						percentage = (progress.Completed * 100) / totalScans
+					}
+					
+					fmt.Fprintf(os.Stderr, "\r\033[K[%d%%] Scanning %d ports... Found %d server(s), %d scans remaining", 
+						percentage, progress.TotalPorts, progress.ServersFound, remaining)
 				}
 				
-				// Clear line and print progress
-				fmt.Fprintf(os.Stderr, "\r\033[K[%d%%] Scanning %d ports... Found %d server(s), %d scans remaining", 
-					percentage, progress.TotalPorts, progress.ServersFound, remaining)
+				// Force output to appear immediately
+				os.Stderr.Sync()
 			}
 			
-			// Final update
-			fmt.Fprintf(os.Stderr, "\r\033[K") // Clear the progress line
+			// Final update - clear the progress line completely
+			fmt.Fprintf(os.Stderr, "\r\033[K")
+			// Move cursor to start of line and clear any remaining content
+			fmt.Fprintf(os.Stderr, "\r")
 		}()
 		
 		servers, err = query.DiscoverServersWithProgress(ctx, address, progressChan, opts...)
