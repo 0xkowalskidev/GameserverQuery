@@ -142,7 +142,7 @@ func RegisterAlias(alias, protocolName string) {
 }
 
 // Constants for discovery mode
-const DiscoveryTimeout = 200 * time.Millisecond
+const DiscoveryTimeout = 300 * time.Millisecond
 
 // getTimeout returns the appropriate timeout based on discovery mode
 func getTimeout(opts *Options) time.Duration {

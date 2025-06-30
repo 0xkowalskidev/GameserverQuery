@@ -627,8 +627,11 @@ func tryProtocolsOnPort(ctx context.Context, host string, port int, options *pro
 		fmt.Printf("[DEBUG] tryProtocolsOnPort: Testing %s with %d protocols\n", testAddr, len(protocol.AllProtocols()))
 	}
 	
+	// Get protocols in order of likelihood for this port
+	protocolsToTry := getOrderedProtocols(port)
+	
 	// Try each protocol until one succeeds
-	for _, proto := range protocol.AllProtocols() {
+	for _, proto := range protocolsToTry {
 		if options.Debug {
 			fmt.Printf("[DEBUG] tryProtocolsOnPort: Trying %s protocol on %s\n", proto.Name(), testAddr)
 		}
@@ -658,6 +661,26 @@ func tryProtocolsOnPort(ctx context.Context, host string, port int, options *pro
 	}
 	
 	return nil, fmt.Errorf("no responsive server found on port %d", port)
+}
+
+// getOrderedProtocols returns protocols in order of likelihood for the given port
+func getOrderedProtocols(port int) []protocol.Protocol {
+	allProtocols := protocol.AllProtocols()
+	ordered := make([]protocol.Protocol, 0, len(allProtocols))
+	remaining := make([]protocol.Protocol, 0, len(allProtocols))
+	
+	// First, try protocols that match this port's default
+	for _, proto := range allProtocols {
+		if proto.DefaultPort() == port {
+			ordered = append(ordered, proto)
+		} else {
+			remaining = append(remaining, proto)
+		}
+	}
+	
+	// Then try remaining protocols
+	ordered = append(ordered, remaining...)
+	return ordered
 }
 
 // queryWithServerInfo handles the common pattern of proto.Query + setServerInfoFields
