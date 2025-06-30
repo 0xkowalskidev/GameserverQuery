@@ -465,11 +465,17 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 		return &QueryResult{Error: err}
 	}
 
-	// Try the specified port first
+	// Try the specified port first with shorter timeout since we have adjacent ports as backup
 	if req.Options.Debug {
 		debugLogf("Query", "Trying primary port %d with %s protocol", ports[0], proto.Name())
 	}
-	info, err := e.queryWithServerInfo(ctx, proto, host, ports[0], req.Options)
+	
+	// Use discovery timeout for primary query to avoid long waits when adjacent ports are available
+	primaryCtx, primaryCancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout*3) // Give it a bit more time than basic discovery
+	defer primaryCancel()
+	
+	primaryOptions := e.createDiscoveryOptions(req.Options)
+	info, err := e.queryWithServerInfo(primaryCtx, proto, host, ports[0], primaryOptions)
 	if err == nil && info.Online {
 		if req.Options.Debug {
 			debugLogf("Query", "SUCCESS on primary port %d", ports[0])
@@ -482,14 +488,18 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 		debugLogf("Query", "Trying %d adjacent ports with protocol detection", len(ports)-1)
 	}
 
-	// If that failed, try adjacent ports
+	// If that failed, try adjacent ports with fresh context
 	discoveryOptions := e.createDiscoveryOptions(req.Options)
+	
+	// Create fresh context for adjacent port discovery with discovery timeout
+	discoveryCtx, cancel := context.WithTimeout(context.Background(), protocol.DiscoveryTimeout*time.Duration(len(ports[1:])*4))
+	defer cancel()
 	
 	for i, testPort := range ports[1:] {
 		if req.Options.Debug {
 			debugLogf("Query", "Trying adjacent port %d (%d/%d)", testPort, i+1, len(ports)-1)
 		}
-		if info, err := e.tryProtocolsOnPort(ctx, host, testPort, discoveryOptions); err == nil {
+		if info, err := e.tryProtocolsOnPort(discoveryCtx, host, testPort, discoveryOptions); err == nil {
 			if req.Options.Debug {
 				debugLogf("Query", "SUCCESS on adjacent port %d", testPort)
 			}
@@ -533,7 +543,14 @@ func (e *QueryEngine) executeAutoDetectQuery(ctx context.Context, req *QueryRequ
 			if req.Options.Debug {
 				debugLogf("AutoDetect", "Trying protocol %s on port %d (%d/%d)", proto.Name(), port, i+1, len(protocolsForPort))
 			}
-			info, err := e.queryWithServerInfo(ctx, proto, host, port, req.Options)
+			
+			// Use shorter timeout for auto-detection since we have adjacent ports as backup
+			quickCtx, quickCancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout*3)
+			quickOptions := e.createDiscoveryOptions(req.Options)
+			
+			info, err := e.queryWithServerInfo(quickCtx, proto, host, port, quickOptions)
+			quickCancel()
+			
 			if err == nil && info.Online {
 				if req.Options.Debug {
 					debugLogf("AutoDetect", "SUCCESS with %s on port %d", proto.Name(), port)
@@ -542,6 +559,52 @@ func (e *QueryEngine) executeAutoDetectQuery(ctx context.Context, req *QueryRequ
 			}
 			if req.Options.Debug {
 				debugLogf("AutoDetect", "FAILED with %s on port %d: %v", proto.Name(), port, err)
+			}
+		}
+	}
+
+	// If port was specified but all protocols failed, try adjacent ports with protocol detection
+	if port != 0 {
+		if req.Options.Debug {
+			debugLogf("AutoDetect", "Specified port %d failed, trying adjacent ports with protocol detection", port)
+		}
+		
+		// Create fresh context for adjacent port discovery with discovery timeout
+		const adjacentPortRange = 3
+		estimatedTime := protocol.DiscoveryTimeout * time.Duration(adjacentPortRange*2*4) // ports * directions * protocols
+		discoveryCtx, cancel := context.WithTimeout(context.Background(), estimatedTime)
+		defer cancel()
+		
+		discoveryOptions := e.createDiscoveryOptions(req.Options)
+		
+		// Try adjacent ports (±3 range like SinglePortStrategy)
+		for offset := 1; offset <= adjacentPortRange; offset++ {
+			// Try port + offset
+			testPort := port + offset
+			if testPort <= 65535 {
+				if req.Options.Debug {
+					debugLogf("AutoDetect", "Trying adjacent port %d (+%d)", testPort, offset)
+				}
+				if info, err := e.tryProtocolsOnPort(discoveryCtx, host, testPort, discoveryOptions); err == nil {
+					if req.Options.Debug {
+						debugLogf("AutoDetect", "SUCCESS on adjacent port %d", testPort)
+					}
+					return &QueryResult{Servers: []*protocol.ServerInfo{info}}
+				}
+			}
+
+			// Try port - offset
+			testPort = port - offset
+			if testPort >= 1024 {
+				if req.Options.Debug {
+					debugLogf("AutoDetect", "Trying adjacent port %d (-%d)", testPort, offset)
+				}
+				if info, err := e.tryProtocolsOnPort(discoveryCtx, host, testPort, discoveryOptions); err == nil {
+					if req.Options.Debug {
+						debugLogf("AutoDetect", "SUCCESS on adjacent port %d", testPort)
+					}
+					return &QueryResult{Servers: []*protocol.ServerInfo{info}}
+				}
 			}
 		}
 	}
