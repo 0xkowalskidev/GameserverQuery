@@ -11,7 +11,7 @@
         pname = "GameserverQuery";
         version = "1.0";
         src = ./.;
-        vendorHash = null;
+        vendorHash = "sha256-nb6HFTfngEMF2n0bZj+Lz/U6rVHd87kvgu07QExPt8g=";
         ldflags = [ "-s" "-w" ];
       };
     };

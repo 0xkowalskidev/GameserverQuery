@@ -282,7 +282,7 @@ func assertServerInfo(t *testing.T, info *ServerInfo, expected expectedServerInf
 	assert.Empty(t, info.Address, "Address not set by protocol")
 	assert.Zero(t, info.Port, "Port not set by protocol")
 	assert.Empty(t, info.Map, "Map field not used by Minecraft")
-	assert.Zero(t, info.Ping, "Ping not measured in test implementation")
+	assert.Greater(t, info.Ping, 0, "Ping should be measured and greater than 0")
 	assert.Nil(t, info.Extra, "Extra fields should be nil")
 	
 	// Player information
