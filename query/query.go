@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -106,7 +107,14 @@ func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*proto
 	}
 
 	// Determine which ports to scan
-	portsToScan := determinePortsToScan(options, specifiedPort)
+	var portsToScan []int
+	if len(options.PortRange) > 0 || specifiedPort != 0 {
+		// Use provided ports as-is
+		portsToScan = determinePortsToScan(options, specifiedPort)
+	} else {
+		// Dynamic discovery mode
+		portsToScan = discoverPortsDynamically(ctx, host, options)
+	}
 
 	// Set up concurrency control
 	maxConcurrency := options.MaxConcurrency
@@ -199,7 +207,14 @@ func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan 
 	}
 
 	// Determine which ports to scan
-	portsToScan := determinePortsToScan(options, specifiedPort)
+	var portsToScan []int
+	if len(options.PortRange) > 0 || specifiedPort != 0 {
+		// Use provided ports as-is
+		portsToScan = determinePortsToScan(options, specifiedPort)
+	} else {
+		// Dynamic discovery mode
+		portsToScan = discoverPortsDynamically(ctx, host, options)
+	}
 
 	// Set up concurrency control
 	maxConcurrency := options.MaxConcurrency
@@ -321,6 +336,105 @@ func DefaultPort(game string) int {
 		return proto.DefaultPort()
 	}
 	return 0
+}
+
+// discoverPortsDynamically expands from default ports to find clusters of game servers
+func discoverPortsDynamically(ctx context.Context, host string, options *protocol.Options) []int {
+	const deadPortThreshold = 3 // Stop after 3 consecutive ports with no servers
+	const minPort = 1024        // Don't scan below this
+	const maxPort = 65535       // Don't scan above this
+
+	// Get unique default ports as seeds (avoid duplicate scanning)
+	seedPorts := make(map[int]bool)
+	for _, proto := range protocol.AllProtocols() {
+		seedPorts[proto.DefaultPort()] = true
+	}
+	
+
+	// Track all ports we'll scan (to avoid duplicate scanning)
+	allPorts := make(map[int]bool)
+	
+	// For each unique seed port, expand outward
+	for seedPort := range seedPorts {
+		// Always include the seed port itself
+		allPorts[seedPort] = true
+		
+		// Scan upward from seed
+		consecutiveFailures := 0
+		for port := seedPort + 1; port <= maxPort; port++ {
+			// Skip if we've already checked this port from another seed
+			if allPorts[port] {
+				consecutiveFailures = 0 // Reset since we know there's a server here
+				continue
+			}
+			
+			// Quick check if any protocol responds on this port
+			if hasActiveServer(ctx, host, port, options) {
+				allPorts[port] = true
+				consecutiveFailures = 0
+			} else {
+				consecutiveFailures++
+				if consecutiveFailures >= deadPortThreshold {
+					break
+				}
+			}
+		}
+		
+		// Scan downward from seed
+		consecutiveFailures = 0
+		for port := seedPort - 1; port >= minPort; port-- {
+			// Skip if we've already checked this port from another seed
+			if allPorts[port] {
+				consecutiveFailures = 0 // Reset since we know there's a server here
+				continue
+			}
+			
+			if hasActiveServer(ctx, host, port, options) {
+				allPorts[port] = true
+				consecutiveFailures = 0
+			} else {
+				consecutiveFailures++
+				if consecutiveFailures >= deadPortThreshold {
+					break
+				}
+			}
+		}
+	}
+	
+	// Convert map to sorted slice
+	var ports []int
+	for port := range allPorts {
+		ports = append(ports, port)
+	}
+	sort.Ints(ports)
+	
+	return ports
+}
+
+// hasActiveServer checks if any protocol responds on the given port
+func hasActiveServer(ctx context.Context, host string, port int, options *protocol.Options) bool {
+	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	
+	// Try each protocol until one succeeds
+	for _, proto := range protocol.AllProtocols() {
+		// Use a short timeout context for this check
+		checkCtx, cancel := context.WithTimeout(ctx, protocol.DiscoveryTimeout)
+		info, err := proto.Query(checkCtx, testAddr, options)
+		cancel()
+		
+		if err == nil && info.Online {
+			return true
+		}
+		
+		// Check if main context is cancelled
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+	}
+	
+	return false
 }
 
 // determinePortsToScan determines which ports to scan based on options and specified port
