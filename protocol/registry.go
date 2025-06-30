@@ -11,28 +11,27 @@ import (
 type Protocol interface {
 	// Query attempts to get server information
 	Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error)
-	
+
 	// Name returns the protocol name (e.g., "minecraft", "source")
 	Name() string
-	
+
 	// DefaultPort returns the default port for this protocol
 	DefaultPort() int
 }
 
 // ServerInfo represents information about a game server
 type ServerInfo struct {
-	Name        string            `json:"name"`
-	Game        string            `json:"game"`
-	Version     string            `json:"version"`
-	Address     string            `json:"address"`
-	Port        int               `json:"port"`
-	Players     PlayerInfo        `json:"players"`
-	Map         string            `json:"map,omitempty"`
-	Ping        int               `json:"ping"`
-	Online      bool              `json:"online"`
-	Extra       map[string]string `json:"extra,omitempty"`
+	Name    string            `json:"name"`
+	Game    string            `json:"game"`
+	Version string            `json:"version"`
+	Address string            `json:"address"`
+	Port    int               `json:"port"`
+	Players PlayerInfo        `json:"players"`
+	Map     string            `json:"map,omitempty"`
+	Ping    int               `json:"ping"`
+	Online  bool              `json:"online"`
+	Extra   map[string]string `json:"extra,omitempty"`
 }
-
 
 // PlayerInfo represents player count and list information
 type PlayerInfo struct {
@@ -54,9 +53,9 @@ type Options struct {
 	Port    int
 	Players bool
 	// Discovery options
-	PortRange    []int // Custom ports to scan
-	MaxConcurrency int // Maximum concurrent queries (0 = unlimited)
-	DiscoveryMode bool // Whether this is a discovery scan (uses shorter timeouts)
+	PortRange      []int // Custom ports to scan
+	MaxConcurrency int   // Maximum concurrent queries (0 = unlimited)
+	DiscoveryMode  bool  // Whether this is a discovery scan (uses shorter timeouts)
 }
 
 // Registry manages protocol registration
@@ -86,12 +85,12 @@ func (r *Registry) Get(name string) (Protocol, bool) {
 	if protocol, exists := r.protocols[name]; exists {
 		return protocol, true
 	}
-	
+
 	// Check if it's an alias
 	if protocolName, exists := r.aliases[name]; exists {
 		return r.protocols[protocolName], true
 	}
-	
+
 	return nil, false
 }
 
@@ -107,17 +106,17 @@ func (r *Registry) All() map[string]Protocol {
 // AllNames returns all protocol names including aliases
 func (r *Registry) AllNames() []string {
 	names := make([]string, 0, len(r.protocols)+len(r.aliases))
-	
+
 	// Add primary protocol names
 	for name := range r.protocols {
 		names = append(names, name)
 	}
-	
+
 	// Add aliases
 	for alias := range r.aliases {
 		names = append(names, alias)
 	}
-	
+
 	return names
 }
 
@@ -142,7 +141,7 @@ func RegisterAlias(alias, protocolName string) {
 }
 
 // Constants for discovery mode
-const DiscoveryTimeout = 50 * time.Millisecond
+const DiscoveryTimeout = 200 * time.Millisecond
 
 // getTimeout returns the appropriate timeout based on discovery mode
 func getTimeout(opts *Options) time.Duration {
@@ -155,19 +154,19 @@ func getTimeout(opts *Options) time.Duration {
 // setupConnection handles common connection setup with discovery mode timeout
 func setupConnection(ctx context.Context, network, addr string, opts *Options) (net.Conn, error) {
 	timeout := getTimeout(opts)
-	
+
 	dialer := &net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return nil, fmt.Errorf("connection failed: %w", err)
 	}
-	
+
 	// Set deadline based on context or timeout
 	deadline := time.Now().Add(timeout)
 	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
 		deadline = ctxDeadline
 	}
 	conn.SetDeadline(deadline)
-	
+
 	return conn, nil
 }

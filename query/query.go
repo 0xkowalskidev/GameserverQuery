@@ -33,17 +33,69 @@ func Query(ctx context.Context, game, addr string, opts ...Option) (*protocol.Se
 		return nil, fmt.Errorf("invalid address: %w", err)
 	}
 
-	fullAddr := net.JoinHostPort(host, strconv.Itoa(port))
-	
+	// Try the specified port first
 	start := time.Now()
+	fullAddr := net.JoinHostPort(host, strconv.Itoa(port))
 	info, err := proto.Query(ctx, fullAddr, options)
-	if err != nil {
-		return nil, err
+	if err == nil && info.Online {
+		setServerInfoFields(info, host, port, start)
+		return info, nil
 	}
 
-	// Set common fields
-	setServerInfoFields(info, host, port, start)
-	return info, nil
+	// If that failed, try adjacent ports (±3 ports)
+	const adjacentPortRange = 3
+	for offset := 1; offset <= adjacentPortRange; offset++ {
+		// Try port + offset
+		testPort := port + offset
+		if testPort <= 65535 {
+			testAddr := net.JoinHostPort(host, strconv.Itoa(testPort))
+			
+			// Try all protocols on this port (like discovery does)
+			for _, p := range protocol.AllProtocols() {
+				start = time.Now()
+				discoveryOptions := *options
+				discoveryOptions.DiscoveryMode = true
+				info, err = p.Query(ctx, testAddr, &discoveryOptions)
+				if err == nil && info.Online {
+					setServerInfoFields(info, host, testPort, start)
+					return info, nil
+				}
+			}
+		}
+
+		// Try port - offset
+		testPort = port - offset
+		if testPort >= 1024 {
+			discoveryOptions := *options
+			discoveryOptions.DiscoveryMode = true
+			
+			// Use the same logic as discovery
+			if hasActiveServer(ctx, host, testPort, &discoveryOptions) {
+				// Found a server, now query it properly to get details
+				testAddr := net.JoinHostPort(host, strconv.Itoa(testPort))
+				start = time.Now()
+				
+				// Try the requested protocol first
+				info, err = proto.Query(ctx, testAddr, &discoveryOptions)
+				if err == nil && info.Online {
+					setServerInfoFields(info, host, testPort, start)
+					return info, nil
+				}
+				
+				// If that fails, try all protocols to find the right one
+				for _, p := range protocol.AllProtocols() {
+					info, err = p.Query(ctx, testAddr, &discoveryOptions)
+					if err == nil && info.Online {
+						setServerInfoFields(info, host, testPort, start)
+						return info, nil
+					}
+				}
+			}
+		}
+	}
+
+	// If all attempts failed, return the original error
+	return nil, fmt.Errorf("no responsive server found at %s or adjacent ports", addr)
 }
 
 // AutoDetect tries to detect the game type by querying common protocols
@@ -356,10 +408,14 @@ func discoverPortsDynamically(ctx context.Context, host string, options *protoco
 	
 	// For each unique seed port, expand outward
 	for seedPort := range seedPorts {
-		// Always include the seed port itself
-		allPorts[seedPort] = true
+		// Check the seed port and expand from there regardless of result
 		
-		// Scan upward from seed
+		// Scan the seed port itself
+		if hasActiveServer(ctx, host, seedPort, options) {
+			allPorts[seedPort] = true
+		}
+		
+		// Scan upward from seed (always scan a few ports even if seed failed)
 		consecutiveFailures := 0
 		for port := seedPort + 1; port <= maxPort; port++ {
 			// Skip if we've already checked this port from another seed
@@ -380,7 +436,7 @@ func discoverPortsDynamically(ctx context.Context, host string, options *protoco
 			}
 		}
 		
-		// Scan downward from seed
+		// Scan downward from seed (always scan a few ports even if seed failed)
 		consecutiveFailures = 0
 		for port := seedPort - 1; port >= minPort; port-- {
 			// Skip if we've already checked this port from another seed
