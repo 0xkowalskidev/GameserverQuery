@@ -407,102 +407,166 @@ func discoverPortsDynamicallyWithProgress(ctx context.Context, host string, opti
 		seedPorts[proto.DefaultPort()] = true
 	}
 	
+	// Early exit optimization: track which seed ports have servers
+	seedPortsWithServers := make(map[int]bool)
+	
 	// Track all ports we'll scan (to avoid duplicate scanning)
 	allPorts := make(map[int]bool)
 	var portsChecked, serversFound int
+	var portsMux, progressMux sync.Mutex
 	
-	// For each unique seed port, expand outward
+	// Concurrent discovery with worker pool
+	const maxDiscoveryWorkers = 3
+	semaphore := make(chan struct{}, maxDiscoveryWorkers)
+	var wg sync.WaitGroup
+	
+	// For each unique seed port, expand outward concurrently
 	for seedPort := range seedPorts {
-		// Check the seed port and expand from there regardless of result
-		
-		// Scan the seed port itself
-		if options.Debug {
-			fmt.Printf("[DEBUG] Checking seed port %d\n", seedPort)
-		}
-		
-		portsChecked++
-		if progressChan != nil {
-			progressChan <- ScanProgress{
-				TotalPorts:     0, // Still discovering
-				TotalProtocols: len(protocol.AllProtocols()),
-				Completed:      portsChecked,
-				ServersFound:   serversFound,
-			}
-		}
-		
-		if hasActiveServer(ctx, host, seedPort, options) {
-			allPorts[seedPort] = true
-			serversFound++
+		wg.Add(1)
+		go func(seedPort int) {
+			defer wg.Done()
+			
+			// Acquire semaphore
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			
+			// Check the seed port and expand from there regardless of result
+			
+			// Scan the seed port itself
 			if options.Debug {
-				fmt.Printf("[DEBUG] Found server on seed port %d\n", seedPort)
-			}
-		} else if options.Debug {
-			fmt.Printf("[DEBUG] No server on seed port %d\n", seedPort)
-		}
-		
-		// Scan upward from seed (always scan a few ports even if seed failed)
-		consecutiveFailures := 0
-		for port := seedPort + 1; port <= maxPort; port++ {
-			// Skip if we've already checked this port from another seed
-			if allPorts[port] {
-				consecutiveFailures = 0 // Reset since we know there's a server here
-				continue
+				fmt.Printf("[DEBUG] Checking seed port %d\n", seedPort)
 			}
 			
+			progressMux.Lock()
 			portsChecked++
+			currentChecked := portsChecked
+			currentFound := serversFound
+			progressMux.Unlock()
+			
 			if progressChan != nil {
 				progressChan <- ScanProgress{
 					TotalPorts:     0, // Still discovering
 					TotalProtocols: len(protocol.AllProtocols()),
-					Completed:      portsChecked,
-					ServersFound:   serversFound,
+					Completed:      currentChecked,
+					ServersFound:   currentFound,
 				}
 			}
 			
-			// Quick check if any protocol responds on this port
-			if hasActiveServer(ctx, host, port, options) {
-				allPorts[port] = true
-				serversFound++
-				consecutiveFailures = 0
-			} else {
-				consecutiveFailures++
-				if consecutiveFailures >= deadPortThreshold {
-					break
+			if hasActiveServer(ctx, host, seedPort, options) {
+				portsMux.Lock()
+				if !allPorts[seedPort] {
+					allPorts[seedPort] = true
+					seedPortsWithServers[seedPort] = true
+					progressMux.Lock()
+					serversFound++
+					progressMux.Unlock()
 				}
+				portsMux.Unlock()
+				
+				if options.Debug {
+					fmt.Printf("[DEBUG] Found server on seed port %d\n", seedPort)
+				}
+			} else if options.Debug {
+				fmt.Printf("[DEBUG] No server on seed port %d\n", seedPort)
 			}
-		}
 		
-		// Scan downward from seed (always scan a few ports even if seed failed)
-		consecutiveFailures = 0
-		for port := seedPort - 1; port >= minPort; port-- {
-			// Skip if we've already checked this port from another seed
-			if allPorts[port] {
-				consecutiveFailures = 0 // Reset since we know there's a server here
-				continue
-			}
-			
-			portsChecked++
-			if progressChan != nil {
-				progressChan <- ScanProgress{
-					TotalPorts:     0, // Still discovering
-					TotalProtocols: len(protocol.AllProtocols()),
-					Completed:      portsChecked,
-					ServersFound:   serversFound,
+			// Scan upward from seed (always scan a few ports even if seed failed)
+			consecutiveFailures := 0
+			for port := seedPort + 1; port <= maxPort; port++ {
+				// Skip if we've already checked this port from another seed
+				portsMux.Lock()
+				alreadyChecked := allPorts[port]
+				portsMux.Unlock()
+				
+				if alreadyChecked {
+					consecutiveFailures = 0 // Reset since we know there's a server here
+					continue
+				}
+				
+				progressMux.Lock()
+				portsChecked++
+				currentChecked := portsChecked
+				currentFound := serversFound
+				progressMux.Unlock()
+				
+				if progressChan != nil {
+					progressChan <- ScanProgress{
+						TotalPorts:     0, // Still discovering
+						TotalProtocols: len(protocol.AllProtocols()),
+						Completed:      currentChecked,
+						ServersFound:   currentFound,
+					}
+				}
+				
+				// Quick check if any protocol responds on this port
+				if hasActiveServer(ctx, host, port, options) {
+					portsMux.Lock()
+					if !allPorts[port] {
+						allPorts[port] = true
+						progressMux.Lock()
+						serversFound++
+						progressMux.Unlock()
+					}
+					portsMux.Unlock()
+					consecutiveFailures = 0
+				} else {
+					consecutiveFailures++
+					if consecutiveFailures >= deadPortThreshold {
+						break
+					}
 				}
 			}
 			
-			if hasActiveServer(ctx, host, port, options) {
-				allPorts[port] = true
-				serversFound++
-				consecutiveFailures = 0
-			} else {
-				consecutiveFailures++
-				if consecutiveFailures >= deadPortThreshold {
-					break
+			// Scan downward from seed (always scan a few ports even if seed failed)
+			consecutiveFailures = 0
+			for port := seedPort - 1; port >= minPort; port-- {
+				// Skip if we've already checked this port from another seed
+				portsMux.Lock()
+				alreadyChecked := allPorts[port]
+				portsMux.Unlock()
+				
+				if alreadyChecked {
+					consecutiveFailures = 0 // Reset since we know there's a server here
+					continue
+				}
+				
+				progressMux.Lock()
+				portsChecked++
+				currentChecked := portsChecked
+				currentFound := serversFound
+				progressMux.Unlock()
+				
+				if progressChan != nil {
+					progressChan <- ScanProgress{
+						TotalPorts:     0, // Still discovering
+						TotalProtocols: len(protocol.AllProtocols()),
+						Completed:      currentChecked,
+						ServersFound:   currentFound,
+					}
+				}
+				
+				if hasActiveServer(ctx, host, port, options) {
+					portsMux.Lock()
+					if !allPorts[port] {
+						allPorts[port] = true
+						progressMux.Lock()
+						serversFound++
+						progressMux.Unlock()
+					}
+					portsMux.Unlock()
+					consecutiveFailures = 0
+				} else {
+					consecutiveFailures++
+					if consecutiveFailures >= deadPortThreshold {
+						break
+					}
 				}
 			}
-		}
+		}(seedPort)
 	}
+	
+	// Wait for all discovery workers to complete
+	wg.Wait()
 	
 	// Convert map to sorted slice
 	var ports []int
@@ -609,11 +673,31 @@ func hasActiveServer(ctx context.Context, host string, port int, options *protoc
 		fmt.Printf("[DEBUG] hasActiveServer: Checking port %d with %v timeout\n", port, protocol.DiscoveryTimeout)
 	}
 	
-	_, err := tryProtocolsOnPort(checkCtx, host, port, options)
+	// Fast path: try a simple TCP connection first to see if anything is listening
+	testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+	conn, err := net.DialTimeout("tcp", testAddr, protocol.DiscoveryTimeout/2)
+	if err == nil {
+		conn.Close()
+		// Something is listening, now check protocols
+		_, err := tryProtocolsOnPort(checkCtx, host, port, options)
+		
+		if options.Debug {
+			if err == nil {
+				fmt.Printf("[DEBUG] hasActiveServer: Port %d has active server\n", port)
+			} else {
+				fmt.Printf("[DEBUG] hasActiveServer: Port %d has listener but no valid protocol\n", port)
+			}
+		}
+		
+		return err == nil
+	}
+	
+	// TCP failed, maybe it's UDP only - try protocols directly
+	_, err = tryProtocolsOnPort(checkCtx, host, port, options)
 	
 	if options.Debug {
 		if err == nil {
-			fmt.Printf("[DEBUG] hasActiveServer: Port %d has active server\n", port)
+			fmt.Printf("[DEBUG] hasActiveServer: Port %d has active server (UDP)\n", port)
 		} else {
 			fmt.Printf("[DEBUG] hasActiveServer: Port %d check failed: %v\n", port, err)
 		}
