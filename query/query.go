@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/0xkowalskidev/gameserverquery/protocol"
@@ -40,7 +41,7 @@ func Query(ctx context.Context, game, addr string, opts ...Option) (*protocol.Se
 	}
 
 	// Set common fields
-	setServerInfoFields(info, host, port, game, start)
+	setServerInfoFields(info, host, port, start)
 	return info, nil
 }
 
@@ -82,13 +83,231 @@ func AutoDetect(ctx context.Context, addr string, opts ...Option) (*protocol.Ser
 			start := time.Now()
 			info, err := proto.Query(ctx, testAddr, options)
 			if err == nil && info.Online {
-				setServerInfoFields(info, host, testPort, proto.Name(), start)
+				setServerInfoFields(info, host, testPort, start)
 				return info, nil
 			}
 		}
 	}
 
 	return nil, fmt.Errorf("no responsive server found at %s", addr)
+}
+
+// DiscoverServers scans for multiple game servers on the given host
+func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*protocol.ServerInfo, error) {
+	options := DefaultOptions()
+	options.DiscoveryMode = true // Enable discovery mode for shorter timeouts
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	host, specifiedPort, err := parseAddress(addr, options.Port, 0)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address: %w", err)
+	}
+
+	// Determine which ports to scan
+	portsToScan := determinePortsToScan(options, specifiedPort)
+
+	// Set up concurrency control
+	maxConcurrency := options.MaxConcurrency
+	if maxConcurrency <= 0 {
+		maxConcurrency = len(portsToScan) * len(protocol.AllProtocols())
+	}
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	// Results channel and wait group
+	type result struct {
+		info *protocol.ServerInfo
+		err  error
+	}
+	results := make(chan result, len(portsToScan)*len(protocol.AllProtocols()))
+	var wg sync.WaitGroup
+
+	// Try protocols sequentially for each port to avoid timeouts on wrong protocols
+	for _, port := range portsToScan {
+		wg.Add(1)
+		go func(port int) {
+			defer wg.Done()
+			
+			// Try each protocol on this port until one succeeds
+			testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+			
+			for _, proto := range protocol.AllProtocols() {
+				// Acquire semaphore
+				select {
+				case semaphore <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				
+				found := false
+				func() {
+					defer func() { <-semaphore }()
+					
+					start := time.Now()
+					info, err := proto.Query(ctx, testAddr, options)
+					if err == nil && info.Online {
+						setServerInfoFields(info, host, port, start)
+						results <- result{info: info}
+						found = true
+					}
+				}()
+				
+				if found {
+					break // Found a working server, stop trying other protocols
+				}
+			}
+		}(port)
+	}
+
+	// Wait for all queries to complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect successful results
+	var servers []*protocol.ServerInfo
+	for res := range results {
+		if res.info != nil {
+			servers = append(servers, res.info)
+		}
+	}
+
+	return servers, nil
+}
+
+// ScanProgress represents the progress of a server scan
+type ScanProgress struct {
+	TotalPorts     int
+	TotalProtocols int
+	Completed      int
+	ServersFound   int
+}
+
+// DiscoverServersWithProgress scans for multiple game servers and reports progress
+func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan chan<- ScanProgress, opts ...Option) ([]*protocol.ServerInfo, error) {
+	options := DefaultOptions()
+	options.DiscoveryMode = true // Enable discovery mode for shorter timeouts
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	host, specifiedPort, err := parseAddress(addr, options.Port, 0)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address: %w", err)
+	}
+
+	// Determine which ports to scan
+	portsToScan := determinePortsToScan(options, specifiedPort)
+
+	// Set up concurrency control
+	maxConcurrency := options.MaxConcurrency
+	if maxConcurrency <= 0 {
+		maxConcurrency = len(portsToScan) * len(protocol.AllProtocols())
+	}
+	semaphore := make(chan struct{}, maxConcurrency)
+
+	// Results channel and wait group
+	type result struct {
+		info *protocol.ServerInfo
+		err  error
+	}
+	results := make(chan result, len(portsToScan)*len(protocol.AllProtocols()))
+	var wg sync.WaitGroup
+
+	// Progress tracking
+	totalProtocols := len(protocol.AllProtocols())
+	var progressMux sync.Mutex
+	var completed, serversFound int
+	
+	// Send initial progress
+	if progressChan != nil {
+		progressChan <- ScanProgress{
+			TotalPorts:     len(portsToScan),
+			TotalProtocols: totalProtocols,
+			Completed:      0,
+			ServersFound:   0,
+		}
+	}
+	
+	// Try protocols sequentially for each port to avoid timeouts on wrong protocols
+	for _, port := range portsToScan {
+		wg.Add(1)
+		go func(port int) {
+			defer wg.Done()
+			
+			// Try each protocol on this port until one succeeds
+			testAddr := net.JoinHostPort(host, strconv.Itoa(port))
+			
+			for _, proto := range protocol.AllProtocols() {
+				// Acquire semaphore
+				select {
+				case semaphore <- struct{}{}:
+				case <-ctx.Done():
+					return
+				}
+				
+				found := false
+				func() {
+					defer func() { <-semaphore }()
+					
+					start := time.Now()
+					info, err := proto.Query(ctx, testAddr, options)
+					
+					// Update progress
+					progressMux.Lock()
+					completed++
+					if err == nil && info.Online {
+						serversFound++
+						setServerInfoFields(info, host, port, start)
+						results <- result{info: info}
+						found = true
+					}
+					currentProgress := ScanProgress{
+						TotalPorts:     len(portsToScan),
+						TotalProtocols: totalProtocols,
+						Completed:      completed,
+						ServersFound:   serversFound,
+					}
+					progressMux.Unlock()
+					
+					// Send progress update
+					if progressChan != nil {
+						select {
+						case progressChan <- currentProgress:
+						default:
+						}
+					}
+				}()
+				
+				if found {
+					break // Found a working server, stop trying other protocols
+				}
+			}
+		}(port)
+	}
+
+	// Wait for all queries to complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect successful results
+	var servers []*protocol.ServerInfo
+	for res := range results {
+		if res.info != nil {
+			servers = append(servers, res.info)
+		}
+	}
+
+	// Close progress channel after all results are collected
+	if progressChan != nil {
+		close(progressChan)
+	}
+
+	return servers, nil
 }
 
 // SupportedGames returns a list of supported game protocols including aliases
@@ -102,6 +321,28 @@ func DefaultPort(game string) int {
 		return proto.DefaultPort()
 	}
 	return 0
+}
+
+// determinePortsToScan determines which ports to scan based on options and specified port
+func determinePortsToScan(options *protocol.Options, specifiedPort int) []int {
+	if len(options.PortRange) > 0 {
+		// Use custom port range
+		return options.PortRange
+	} else if specifiedPort != 0 {
+		// Single port specified
+		return []int{specifiedPort}
+	} else {
+		// Scan all default ports
+		defaultPorts := make(map[int]bool)
+		for _, proto := range protocol.AllProtocols() {
+			defaultPorts[proto.DefaultPort()] = true
+		}
+		var portsToScan []int
+		for port := range defaultPorts {
+			portsToScan = append(portsToScan, port)
+		}
+		return portsToScan
+	}
 }
 
 // parseAddress parses an address string and returns host, port
@@ -137,7 +378,7 @@ func parseAddress(addr string, optPort, defaultPort int) (string, int, error) {
 }
 
 // setServerInfoFields sets common fields on ServerInfo
-func setServerInfoFields(info *protocol.ServerInfo, host string, port int, game string, start time.Time) {
+func setServerInfoFields(info *protocol.ServerInfo, host string, port int, start time.Time) {
 	info.Address = host
 	info.Port = port
 	// Game field should be set by the protocol implementation, not here
@@ -150,6 +391,9 @@ func DefaultOptions() *protocol.Options {
 		Timeout: 5 * time.Second,
 		Port:    0, // Use protocol default
 		Players: false,
+		PortRange: nil,
+		MaxConcurrency: 0, // unlimited
+		DiscoveryMode: false,
 	}
 }
 
@@ -171,6 +415,31 @@ func Port(port int) Option {
 func WithPlayers() Option {
 	return func(o *protocol.Options) {
 		o.Players = true
+	}
+}
+
+// WithPortRange specifies a range of ports to scan
+func WithPortRange(start, end int) Option {
+	return func(o *protocol.Options) {
+		ports := make([]int, 0, end-start+1)
+		for port := start; port <= end; port++ {
+			ports = append(ports, port)
+		}
+		o.PortRange = ports
+	}
+}
+
+// WithCustomPorts specifies exact ports to scan
+func WithCustomPorts(ports []int) Option {
+	return func(o *protocol.Options) {
+		o.PortRange = ports
+	}
+}
+
+// WithMaxConcurrency limits concurrent queries
+func WithMaxConcurrency(max int) Option {
+	return func(o *protocol.Options) {
+		o.MaxConcurrency = max
 	}
 }
 

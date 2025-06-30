@@ -2,6 +2,8 @@ package protocol
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"time"
 )
 
@@ -51,6 +53,10 @@ type Options struct {
 	Timeout time.Duration
 	Port    int
 	Players bool
+	// Discovery options
+	PortRange    []int // Custom ports to scan
+	MaxConcurrency int // Maximum concurrent queries (0 = unlimited)
+	DiscoveryMode bool // Whether this is a discovery scan (uses shorter timeouts)
 }
 
 // Registry manages protocol registration
@@ -133,4 +139,35 @@ func AllGameNames() []string {
 // RegisterAlias adds an alias for an existing protocol
 func RegisterAlias(alias, protocolName string) {
 	registry.RegisterAlias(alias, protocolName)
+}
+
+// Constants for discovery mode
+const DiscoveryTimeout = 50 * time.Millisecond
+
+// getTimeout returns the appropriate timeout based on discovery mode
+func getTimeout(opts *Options) time.Duration {
+	if opts.DiscoveryMode {
+		return DiscoveryTimeout
+	}
+	return opts.Timeout
+}
+
+// setupConnection handles common connection setup with discovery mode timeout
+func setupConnection(ctx context.Context, network, addr string, opts *Options) (net.Conn, error) {
+	timeout := getTimeout(opts)
+	
+	dialer := &net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, fmt.Errorf("connection failed: %w", err)
+	}
+	
+	// Set deadline based on context or timeout
+	deadline := time.Now().Add(timeout)
+	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+		deadline = ctxDeadline
+	}
+	conn.SetDeadline(deadline)
+	
+	return conn, nil
 }

@@ -175,12 +175,19 @@ func TestOptions(t *testing.T) {
 	if opts.Players {
 		t.Error("Default players should be false")
 	}
+	if opts.PortRange != nil {
+		t.Error("Default port range should be nil")
+	}
+	if opts.MaxConcurrency != 0 {
+		t.Error("Default max concurrency should be 0 (unlimited)")
+	}
 
 	// Test functional options
 	opts = DefaultOptions()
 	Timeout(10 * time.Second)(opts)
 	Port(8080)(opts)
 	WithPlayers()(opts)
+	WithMaxConcurrency(5)(opts)
 
 	if opts.Timeout != 10*time.Second {
 		t.Errorf("Timeout option failed, got %v", opts.Timeout)
@@ -191,6 +198,109 @@ func TestOptions(t *testing.T) {
 	if !opts.Players {
 		t.Error("WithPlayers option failed")
 	}
+	if opts.MaxConcurrency != 5 {
+		t.Errorf("WithMaxConcurrency option failed, got %d", opts.MaxConcurrency)
+	}
+}
+
+func TestPortRangeOptions(t *testing.T) {
+	// Test WithPortRange
+	opts := DefaultOptions()
+	WithPortRange(25565, 25570)(opts)
+	
+	if len(opts.PortRange) != 6 {
+		t.Errorf("Expected 6 ports in range, got %d", len(opts.PortRange))
+	}
+	
+	expectedPorts := []int{25565, 25566, 25567, 25568, 25569, 25570}
+	for i, port := range opts.PortRange {
+		if port != expectedPorts[i] {
+			t.Errorf("Port range index %d: expected %d, got %d", i, expectedPorts[i], port)
+		}
+	}
+	
+	// Test WithCustomPorts
+	opts = DefaultOptions()
+	customPorts := []int{25565, 27015, 7777}
+	WithCustomPorts(customPorts)(opts)
+	
+	if len(opts.PortRange) != len(customPorts) {
+		t.Errorf("Expected %d custom ports, got %d", len(customPorts), len(opts.PortRange))
+	}
+	
+	for i, port := range opts.PortRange {
+		if port != customPorts[i] {
+			t.Errorf("Custom ports index %d: expected %d, got %d", i, customPorts[i], port)
+		}
+	}
+}
+
+func TestDiscoverServers(t *testing.T) {
+	ctx := context.Background()
+	
+	// Test with offline server - should return empty list
+	servers, err := DiscoverServers(ctx, "192.168.1.99", Timeout(1*time.Second), WithMaxConcurrency(5))
+	if err != nil {
+		t.Errorf("DiscoverServers should not return error for offline servers, got: %v", err)
+	}
+	
+	if len(servers) != 0 {
+		t.Errorf("Expected no servers found for offline address, got %d", len(servers))
+	}
+	
+	// Test with specific port
+	servers, err = DiscoverServers(ctx, "192.168.1.99:25565", Timeout(1*time.Second))
+	if err != nil {
+		t.Errorf("DiscoverServers with port should not return error, got: %v", err)
+	}
+	
+	// Test with custom ports
+	servers, err = DiscoverServers(ctx, "192.168.1.99", 
+		Timeout(1*time.Second),
+		WithCustomPorts([]int{25565, 27015}))
+	if err != nil {
+		t.Errorf("DiscoverServers with custom ports should not return error, got: %v", err)
+	}
+	
+	// Test with port range
+	servers, err = DiscoverServers(ctx, "192.168.1.99",
+		Timeout(1*time.Second),
+		WithPortRange(25565, 25567),
+		WithMaxConcurrency(2))
+	if err != nil {
+		t.Errorf("DiscoverServers with port range should not return error, got: %v", err)
+	}
+}
+
+func TestDiscoverServersWithRealServers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+	
+	ctx := context.Background()
+	
+	// Test discovering servers on localhost with all default ports
+	servers, err := DiscoverServers(ctx, "localhost", Timeout(5*time.Second))
+	if err != nil {
+		t.Logf("DiscoverServers test failed: %v", err)
+		return
+	}
+	
+	t.Logf("Found %d server(s) on localhost", len(servers))
+	for i, server := range servers {
+		t.Logf("Server %d: %s on port %d (%s)", i+1, server.Game, server.Port, server.Name)
+	}
+	
+	// Test with specific port range
+	servers, err = DiscoverServers(ctx, "localhost",
+		Timeout(5*time.Second),
+		WithPortRange(25565, 25570))
+	if err != nil {
+		t.Logf("DiscoverServers with port range test failed: %v", err)
+		return
+	}
+	
+	t.Logf("Found %d server(s) in port range 25565-25570", len(servers))
 }
 
 // Integration test - only runs with real servers

@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // MinecraftProtocol implements the Minecraft Server List Ping protocol
@@ -29,20 +28,11 @@ func (m *MinecraftProtocol) DefaultPort() int {
 }
 
 func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
-	// Use context for connection timeout
-	dialer := &net.Dialer{Timeout: opts.Timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	conn, err := setupConnection(ctx, "tcp", addr, opts)
 	if err != nil {
-		return &ServerInfo{Online: false}, fmt.Errorf("connection failed: %w", err)
+		return &ServerInfo{Online: false}, err
 	}
 	defer conn.Close()
-
-	// Set deadline based on context or timeout
-	deadline := time.Now().Add(opts.Timeout)
-	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
-		deadline = ctxDeadline
-	}
-	conn.SetDeadline(deadline)
 
 	// Parse host and port for handshake
 	host, portStr, err := net.SplitHostPort(addr)

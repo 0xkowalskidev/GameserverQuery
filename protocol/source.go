@@ -44,14 +44,11 @@ func (s *SourceProtocol) DefaultPort() int {
 }
 
 func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
-	conn, err := net.Dial("udp", addr)
+	conn, err := setupConnection(ctx, "udp", addr, opts)
 	if err != nil {
-		return &ServerInfo{Online: false}, fmt.Errorf("connection failed: %w", err)
+		return &ServerInfo{Online: false}, err
 	}
 	defer conn.Close()
-
-	// Set deadline
-	conn.SetDeadline(time.Now().Add(opts.Timeout))
 
 	start := time.Now()
 
@@ -83,7 +80,7 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 			return &ServerInfo{Online: false}, fmt.Errorf("challenge response too short")
 		}
 		challenge := binary.LittleEndian.Uint32(response[5:9])
-		return s.queryWithChallenge(conn, addr, challenge, opts.Timeout, start, opts)
+		return s.queryWithChallenge(conn, addr, challenge, getTimeout(opts), start, opts)
 	}
 
 	// Check for A2S_INFO response
@@ -114,7 +111,7 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 
 	// Query players if requested
 	if opts.Players {
-		players, err := s.queryPlayers(conn, addr, opts.Timeout)
+		players, err := s.queryPlayers(conn, addr, getTimeout(opts))
 		if err == nil {
 			result.Players.List = players
 		} else {
@@ -174,7 +171,7 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 
 	// Query players if requested
 	if opts.Players {
-		players, err := s.queryPlayers(conn, addr, timeout)
+		players, err := s.queryPlayers(conn, addr, getTimeout(opts))
 		if err == nil {
 			result.Players.List = players
 		} else {
@@ -191,8 +188,6 @@ func (s *SourceProtocol) queryPlayers(conn net.Conn, addr string, timeout time.D
 	challengeBytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(challengeBytes, 0xFFFFFFFF)
 	request = append(request, challengeBytes...)
-
-	conn.SetDeadline(time.Now().Add(timeout))
 
 	// Send request
 	if _, err := conn.Write(request); err != nil {

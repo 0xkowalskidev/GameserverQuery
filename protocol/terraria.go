@@ -28,25 +28,16 @@ func (t *TerrariaProtocol) DefaultPort() int {
 }
 
 func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
-	// Use context for connection timeout
-	dialer := &net.Dialer{Timeout: opts.Timeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	conn, err := setupConnection(ctx, "tcp", addr, opts)
 	if err != nil {
-		return &ServerInfo{Online: false}, fmt.Errorf("connection failed: %w", err)
+		return &ServerInfo{Online: false}, err
 	}
 	defer conn.Close()
-
-	// Set deadline based on context or timeout
-	deadline := time.Now().Add(opts.Timeout)
-	if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
-		deadline = ctxDeadline
-	}
-	conn.SetDeadline(deadline)
 
 	start := time.Now()
 
 	// Try TShock REST API first (more reliable)
-	if info, err := t.queryTShockAPI(ctx, addr, opts.Timeout); err == nil {
+	if info, err := t.queryTShockAPI(ctx, addr, getTimeout(opts)); err == nil {
 		info.Ping = int(time.Since(start).Nanoseconds() / 1e6)
 		return info, nil
 	}
