@@ -28,7 +28,6 @@ func init() {
 	registry.RegisterAlias("insurgency", "source")
 	registry.RegisterAlias("day-of-defeat", "source")
 	registry.RegisterAlias("project-zomboid", "source")
-	registry.RegisterAlias("valheim", "source")
 	registry.RegisterAlias("satisfactory", "source")
 	registry.RegisterAlias("7-days-to-die", "source")
 }

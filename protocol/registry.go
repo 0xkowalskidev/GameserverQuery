@@ -143,7 +143,7 @@ func RegisterAlias(alias, protocolName string) {
 }
 
 // Constants for discovery mode
-const DiscoveryTimeout = 100 * time.Millisecond
+const DiscoveryTimeout = 300 * time.Millisecond
 
 // getTimeout returns the appropriate timeout based on discovery mode
 func getTimeout(opts *Options) time.Duration {
@@ -158,7 +158,7 @@ func setupConnection(ctx context.Context, network, addr string, opts *Options) (
 	timeout := getTimeout(opts)
 
 	if opts.Debug {
-		debugLogf("Connection", "Connecting to %s://%s with timeout %v (discovery mode: %v)", 
+		debugLogf("Connection", "Connecting to %s://%s with timeout %v (discovery mode: %v)",
 			network, addr, timeout, opts.DiscoveryMode)
 	}
 
@@ -166,7 +166,7 @@ func setupConnection(ctx context.Context, network, addr string, opts *Options) (
 	dialer := &net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, network, addr)
 	elapsed := time.Since(start)
-	
+
 	if err != nil {
 		if opts.Debug {
 			debugLogf("Connection", "Connection to %s://%s FAILED: %v (took %v)", network, addr, err, elapsed)
