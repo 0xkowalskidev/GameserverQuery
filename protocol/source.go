@@ -29,6 +29,9 @@ func init() {
 	registry.RegisterAlias("project-zomboid", "source")
 	registry.RegisterAlias("satisfactory", "source")
 	registry.RegisterAlias("7-days-to-die", "source")
+	registry.RegisterAlias("arma-3", "source")
+	registry.RegisterAlias("dayz", "source")
+	registry.RegisterAlias("battalion-1944", "source")
 }
 
 func (s *SourceProtocol) Name() string {

@@ -111,6 +111,12 @@ func (gd *GameDetector) detectByAppID(appIDStr string) string {
 		return "7-days-to-die"
 	case 892970:
 		return "valheim"
+	case 107410:
+		return "arma-3"
+	case 221100:
+		return "dayz"
+	case 489940:
+		return "battalion-1944"
 	}
 	
 	return ""
@@ -155,6 +161,12 @@ func (gd *GameDetector) analyzeGameDescription(gameDesc string) string {
 		return "7-days-to-die"
 	} else if strings.Contains(gameLower, "valheim") {
 		return "valheim"
+	} else if strings.Contains(gameLower, "arma 3") || strings.Contains(gameLower, "arma3") {
+		return "arma-3"
+	} else if strings.Contains(gameLower, "dayz") || strings.Contains(gameLower, "day z") {
+		return "dayz"
+	} else if strings.Contains(gameLower, "battalion 1944") || strings.Contains(gameLower, "battalion1944") {
+		return "battalion-1944"
 	} else if strings.Contains(gameLower, "half-life") || strings.Contains(gameLower, "hl2") {
 		return "half-life"
 	}
