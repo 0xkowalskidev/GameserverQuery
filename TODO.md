@@ -64,7 +64,7 @@ Games are sorted roughly by player count (highest priority first).
 - [ ] 109.172.30.100:27033
 - [ ] 23.27.211.227:30065
 
-### Palworld
+### Palworld - Palworld require auth, either through RCON or rest api, not sure if we will bother to support
 - [ ] 117.50.76.13:6666
 
 ## Medium Priority Games
