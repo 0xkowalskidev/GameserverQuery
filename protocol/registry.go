@@ -22,16 +22,17 @@ type Protocol interface {
 
 // ServerInfo represents information about a game server
 type ServerInfo struct {
-	Name    string            `json:"name"`
-	Game    string            `json:"game"`
-	Version string            `json:"version"`
-	Address string            `json:"address"`
-	Port    int               `json:"port"`
-	Players PlayerInfo        `json:"players"`
-	Map     string            `json:"map,omitempty"`
-	Ping    int               `json:"ping"`
-	Online  bool              `json:"online"`
-	Extra   map[string]string `json:"extra,omitempty"`
+	Name      string            `json:"name"`
+	Game      string            `json:"game"`
+	Version   string            `json:"version"`
+	Address   string            `json:"address"`
+	Port      int               `json:"port"`
+	QueryPort int               `json:"query_port"`
+	Players   PlayerInfo        `json:"players"`
+	Map       string            `json:"map,omitempty"`
+	Ping      int               `json:"ping"`
+	Online    bool              `json:"online"`
+	Extra     map[string]string `json:"extra,omitempty"`
 }
 
 // PlayerInfo represents player count and list information

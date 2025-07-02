@@ -99,7 +99,8 @@ type ServerInfo struct {
     Game        string            `json:"game"`         // Game type identifier 
     Version     string            `json:"version"`      // Game/server version
     Address     string            `json:"address"`      // Server address
-    Port        int               `json:"port"`         // Server port
+    Port        int               `json:"port"`         // Requested server port
+    QueryPort   int               `json:"query_port"`   // Actual port that responded
     Players     PlayerInfo        `json:"players"`      // Player information
     Map         string            `json:"map,omitempty"`         // Current map (optional)
     Ping        time.Duration     `json:"ping"`         // Query response time

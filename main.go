@@ -289,6 +289,7 @@ func outputText(info *protocol.ServerInfo) error {
 		fmt.Printf("Version: %s\n", info.Version)
 	}
 	fmt.Printf("Address: %s:%d\n", info.Address, info.Port)
+	fmt.Printf("Query Port: %d\n", info.QueryPort)
 	fmt.Printf("Players: %d/%d\n", info.Players.Current, info.Players.Max)
 	fmt.Printf("Ping: %d\n", info.Ping)
 
@@ -363,6 +364,7 @@ func outputScanText(servers []*protocol.ServerInfo) error {
 		}
 		fmt.Printf("  Game: %s\n", info.Game)
 		fmt.Printf("  Address: %s:%d\n", info.Address, info.Port)
+		fmt.Printf("  Query Port: %d\n", info.QueryPort)
 		fmt.Printf("  Players: %d/%d\n", info.Players.Current, info.Players.Max)
 		if info.Version != "" {
 			fmt.Printf("  Version: %s\n", info.Version)
