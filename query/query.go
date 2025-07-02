@@ -155,6 +155,14 @@ func DefaultPort(game string) int {
 	return 0
 }
 
+// DefaultQueryPort returns the default query port for a game
+func DefaultQueryPort(game string) int {
+	if proto, exists := protocol.GetProtocol(game); exists {
+		return proto.DefaultQueryPort()
+	}
+	return 0
+}
+
 // Removed: Large helper functions moved to QueryEngine
 
 // parseAddress parses an address string and returns host, port

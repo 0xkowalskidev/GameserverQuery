@@ -52,17 +52,23 @@ gameserverquery -timeout 10s localhost:25565
 
 ### Supported Games
 
-Run `gameserverquery -list` to see all supported games. Popular ones include:
+Run `gameserverquery -list` to see all supported games with their default ports. Popular ones include:
 
 **Core Protocols:**
-- `minecraft` - Minecraft Server List Ping
-- `source` - Source/Steam Query protocol (auto-detects specific games)
-- `terraria` - Terraria native protocol with TShock REST API support
+- `minecraft` - Minecraft Server List Ping (port 25565)
+- `source` - Source/Steam Query protocol (port 27015, auto-detects specific games)
+- `terraria` - Terraria native protocol (port 7777)
 
 **Source/Steam Query Games:**
 - `counter-strike-2` `counter-strike` `counter-source` `garrys-mod` `team-fortress-2`
-- `rust` `ark-survival-evolved` `left-4-dead` `left-4-dead-2` `half-life`
-- `insurgency` `day-of-defeat` `project-zomboid` `valheim` `satisfactory` `7-days-to-die`
+- `rust` `left-4-dead` `left-4-dead-2` `half-life` `insurgency` `day-of-defeat` 
+- `project-zomboid` `satisfactory` `7-days-to-die`
+
+**Games with Separate Game/Query Ports:**
+- `ark-survival-evolved` - Game port 7777, Query port 27015
+- `valheim` - Game port 2456, Query port 2457
+
+**Note:** When no port is specified, the tool automatically uses the appropriate query port for status requests, not the game port where players connect.
 
 ## Library Usage
 

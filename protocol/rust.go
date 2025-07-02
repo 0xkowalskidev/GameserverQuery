@@ -22,6 +22,10 @@ func (r *RustProtocol) DefaultPort() int {
 	return 28015 // Rust game port, not 27015
 }
 
+func (r *RustProtocol) DefaultQueryPort() int {
+	return 28015 // Rust query port is the same as game port
+}
+
 func (r *RustProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	// Use Source protocol for the actual query
 	info, err := r.source.Query(ctx, addr, opts)

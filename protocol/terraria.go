@@ -28,6 +28,10 @@ func (t *TerrariaProtocol) DefaultPort() int {
 	return 7777
 }
 
+func (t *TerrariaProtocol) DefaultQueryPort() int {
+	return 7777
+}
+
 func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	if opts.Debug {
 		debugLogf("Terraria", "Starting query for %s", addr)

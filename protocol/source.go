@@ -24,7 +24,6 @@ func init() {
 	registry.RegisterAlias("left-4-dead", "source")
 	registry.RegisterAlias("left-4-dead-2", "source")
 	registry.RegisterAlias("half-life", "source")
-	registry.RegisterAlias("ark-survival-evolved", "source")
 	registry.RegisterAlias("insurgency", "source")
 	registry.RegisterAlias("day-of-defeat", "source")
 	registry.RegisterAlias("project-zomboid", "source")
@@ -37,6 +36,10 @@ func (s *SourceProtocol) Name() string {
 }
 
 func (s *SourceProtocol) DefaultPort() int {
+	return 27015
+}
+
+func (s *SourceProtocol) DefaultQueryPort() int {
 	return 27015
 }
 

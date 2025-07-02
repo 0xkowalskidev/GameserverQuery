@@ -245,9 +245,10 @@ Scan Options:
   -no-progress         Disable progress indicator
 
 Examples:
-  gameserverquery play.hypixel.net                        # Query gameserver
+  gameserverquery play.hypixel.net                        # Query gameserver (auto-detect)
   gameserverquery play.hypixel.net -players               # Include players list
   gameserverquery -game minecraft play.hypixel.net:25565  # Query gameserver with port and/or game, faster
+  gameserverquery -game ark-survival-evolved server.com   # Uses query port 27015 automatically
   gameserverquery scan 127.0.0.1                          # Scan address for gameservers
 `)
 }
@@ -258,8 +259,13 @@ func listGames() {
 
 	fmt.Println("Supported games:")
 	for _, game := range games {
-		port := query.DefaultPort(game)
-		fmt.Printf("  %-15s (default port: %d)\n", game, port)
+		gamePort := query.DefaultPort(game)
+		queryPort := query.DefaultQueryPort(game)
+		if gamePort == queryPort {
+			fmt.Printf("  %-15s (port: %d)\n", game, gamePort)
+		} else {
+			fmt.Printf("  %-15s (game: %d, query: %d)\n", game, gamePort, queryPort)
+		}
 	}
 }
 

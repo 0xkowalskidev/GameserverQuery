@@ -16,8 +16,11 @@ type Protocol interface {
 	// Name returns the protocol name (e.g., "minecraft", "source")
 	Name() string
 
-	// DefaultPort returns the default port for this protocol
+	// DefaultPort returns the default port for this protocol (where players connect)
 	DefaultPort() int
+
+	// DefaultQueryPort returns the default port for status queries
+	DefaultQueryPort() int
 }
 
 // ServerInfo represents information about a game server

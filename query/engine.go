@@ -105,9 +105,11 @@ func (s *AutoDetectPortStrategy) GetPorts(ctx context.Context, host string, opti
 		return []int{s.SpecifiedPort}, nil
 	}
 	
-	// Get default ports for all protocols
+	// Get default query ports for all protocols (prioritize query ports for discovery)
 	portMap := make(map[int]bool)
 	for _, proto := range protocol.AllProtocols() {
+		portMap[proto.DefaultQueryPort()] = true
+		// Also include game ports for comprehensive discovery
 		portMap[proto.DefaultPort()] = true
 	}
 	
@@ -148,9 +150,11 @@ func (s *DiscoveryPortStrategy) discoverPortsDynamically(ctx context.Context, ho
 		debugLogf("Discovery", "Port range %d-%d, dead port threshold %d", minPort, maxPort, deadPortThreshold)
 	}
 
-	// Get unique default ports as seeds
+	// Get unique default query ports as seeds (prioritize query ports for discovery)
 	seedPorts := make(map[int]bool)
 	for _, proto := range protocol.AllProtocols() {
+		seedPorts[proto.DefaultQueryPort()] = true
+		// Also include game ports for comprehensive discovery
 		seedPorts[proto.DefaultPort()] = true
 	}
 
@@ -292,9 +296,11 @@ func (s *AutoDetectProtocolStrategy) GetProtocols(port int) []protocol.Protocol 
 	ordered := make([]protocol.Protocol, 0, len(allProtocols))
 	remaining := make([]protocol.Protocol, 0, len(allProtocols))
 	
-	// First, try protocols that match this port's default
+	// First, try protocols that match this port's default query port, then game port
 	for _, proto := range allProtocols {
-		if proto.DefaultPort() == port {
+		if proto.DefaultQueryPort() == port {
+			ordered = append(ordered, proto)
+		} else if proto.DefaultPort() == port {
 			ordered = append(ordered, proto)
 		} else {
 			remaining = append(remaining, proto)
@@ -447,8 +453,8 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 		return &QueryResult{Error: fmt.Errorf("unsupported game: %s", req.Game)}
 	}
 
-	// Parse address and determine port
-	host, requestedPort, err := parseAddress(req.Address, req.Options.Port, proto.DefaultPort())
+	// Parse address and determine port - use query port by default since we're querying
+	host, requestedPort, err := parseAddress(req.Address, req.Options.Port, proto.DefaultQueryPort())
 	if err != nil {
 		if req.Options.Debug {
 			debugLogf("Query", "Address parsing failed: %v", err)
@@ -621,7 +627,7 @@ func (e *QueryEngine) executeAutoDetectQuery(ctx context.Context, req *QueryRequ
 	for i, proto := range popularityOrder {
 		testPort := port
 		if testPort == 0 {
-			testPort = proto.DefaultPort()
+			testPort = proto.DefaultQueryPort()
 		}
 		
 		if req.Options.Debug {
@@ -651,9 +657,11 @@ func (e *QueryEngine) getProtocolsByPortPreference(port int) []protocol.Protocol
 	allProtocols := protocol.AllProtocols()
 	var matching, remaining []protocol.Protocol
 	
-	// First try protocols that use this port as default
+	// First try protocols that use this port as default query port, then game port
 	for _, proto := range allProtocols {
-		if proto.DefaultPort() == port {
+		if proto.DefaultQueryPort() == port {
+			matching = append(matching, proto)
+		} else if proto.DefaultPort() == port {
 			matching = append(matching, proto)
 		} else {
 			remaining = append(remaining, proto)

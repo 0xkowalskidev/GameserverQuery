@@ -19,7 +19,11 @@ func (v *ValheimProtocol) Name() string {
 }
 
 func (v *ValheimProtocol) DefaultPort() int {
-	return 2456 // Valheim A2S port, not 27015
+	return 2456 // Valheim game port
+}
+
+func (v *ValheimProtocol) DefaultQueryPort() int {
+	return 2457 // Valheim query port (game port + 1)
 }
 
 func (v *ValheimProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
