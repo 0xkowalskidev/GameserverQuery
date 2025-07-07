@@ -73,11 +73,10 @@ func queryCmd() {
 
 	if *game != "" {
 		// Query specific game
-		info, err = query.Query(ctx, *game, address, opts...)
-	} else {
-		// Auto-detect
-		info, err = query.AutoDetect(ctx, address, opts...)
+		opts = append(opts, query.WithGame(*game))
 	}
+	// Auto-detect if no game specified
+	info, err = query.Query(ctx, address, opts...)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -116,7 +115,7 @@ func scanCmd() {
 
 	// Build options
 	var opts []query.Option
-	opts = append(opts, query.Timeout(*timeout))
+	opts = append(opts, query.WithTimeout(*timeout))
 	opts = append(opts, query.WithMaxConcurrency(*concurrency))
 
 	if *players {
@@ -138,7 +137,7 @@ func scanCmd() {
 			}
 		}
 		if len(portList) > 0 {
-			opts = append(opts, query.WithCustomPorts(portList))
+			opts = append(opts, query.WithPorts(portList))
 		}
 	} else if *portStart > 0 && *portEnd >= *portStart {
 		// Use port range
