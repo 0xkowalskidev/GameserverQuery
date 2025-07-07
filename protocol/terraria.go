@@ -38,6 +38,10 @@ func (t *TerrariaProtocol) Games() []GameConfig {
 	}
 }
 
+func (t *TerrariaProtocol) DetectGame(info *ServerInfo) string {
+	return "terraria"
+}
+
 func (t *TerrariaProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	if opts.Debug {
 		debugLogf("Terraria", "Starting query for %s", addr)
@@ -150,7 +154,7 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 			},
 		}
 		// Use central game detector to set the game field
-		info.Game = DetectGameFromResponse(info, "terraria")
+		info.Game = t.DetectGame(info)
 		return info, nil
 		
 	case 0x19: // Chat message response
@@ -170,7 +174,7 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 			},
 		}
 		// Use central game detector to set the game field
-		info.Game = DetectGameFromResponse(info, "terraria")
+		info.Game = t.DetectGame(info)
 		return info, nil
 	}
 
@@ -205,7 +209,7 @@ func (t *TerrariaProtocol) parseResponse(data []byte) (*ServerInfo, error) {
 	}
 	
 	// Use central game detector to set the game field
-	info.Game = DetectGameFromResponse(info, "terraria")
+	info.Game = t.DetectGame(info)
 
 	// Try to extract player count from common response patterns
 	// Pattern 1: "Online players: X/Y"

@@ -39,6 +39,10 @@ func (m *MinecraftProtocol) Games() []GameConfig {
 	}
 }
 
+func (m *MinecraftProtocol) DetectGame(info *ServerInfo) string {
+	return "minecraft"
+}
+
 func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	if opts.Debug {
 		debugLogf("Minecraft", "Starting query for %s", addr)
@@ -165,7 +169,7 @@ func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Option
 	}
 	
 	// Use central game detector to set the game field
-	info.Game = DetectGameFromResponse(info, "minecraft")
+	info.Game = m.DetectGame(info)
 
 	// Add player list if requested
 	if opts.Players {

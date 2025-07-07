@@ -55,6 +55,24 @@ func (s *A2SProtocol) Games() []GameConfig {
 	}
 }
 
+func (s *A2SProtocol) DetectGame(info *ServerInfo) string {
+	if info == nil || !info.Online {
+		return "a2s"
+	}
+
+	// Use App ID for reliable game detection
+	if info.Extra != nil {
+		if appIDStr, exists := info.Extra["app_id"]; exists {
+			if game := s.detectByAppID(appIDStr); game != "" {
+				return game
+			}
+		}
+	}
+	
+	// Default to generic a2s if no App ID or unknown App ID
+	return "a2s"
+}
+
 func (s *A2SProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	if opts.Debug {
 		debugLogf("A2S", "Starting query for %s", addr)
@@ -167,8 +185,8 @@ func (s *A2SProtocol) Query(ctx context.Context, addr string, opts *Options) (*S
 			result.Name, info.Game, result.Map, result.Players.Current, result.Players.Max)
 	}
 
-	// Use central game detector to set the game field
-	result.Game = DetectGameFromResponse(result, "a2s")
+	// Use protocol-specific game detection
+	result.Game = s.DetectGame(result)
 
 	if opts.Debug {
 		debugLogf("A2S", "Detected game type: '%s'", result.Game)
@@ -250,8 +268,8 @@ func (s *A2SProtocol) queryWithChallenge(conn net.Conn, addr string, challenge u
 		},
 	}
 
-	// Use central game detector to set the game field
-	result.Game = DetectGameFromResponse(result, "a2s")
+	// Use protocol-specific game detection
+	result.Game = s.DetectGame(result)
 
 	// Query players if requested
 	if opts.Players {
@@ -513,3 +531,55 @@ type A2SInfo struct {
 	VAC         uint8
 	Version     string
 }
+
+// detectByAppID determines game type from Steam App ID
+func (s *A2SProtocol) detectByAppID(appIDStr string) string {
+	// Convert string to int for comparison
+	var appID int
+	if _, err := fmt.Sscanf(appIDStr, "%d", &appID); err != nil {
+		return ""
+	}
+	
+	// Check by App ID first (most reliable)
+	switch appID {
+	case 730:
+		return "counter-strike"
+	case 240:
+		return "counter-strike"
+	case 4000:
+		return "garrys-mod"
+	case 440:
+		return "team-fortress-2"
+	case 550:
+		return "left-4-dead-2"
+	case 500:
+		return "left-4-dead"
+	case 320:
+		return "half-life"
+	case 300:
+		return "day-of-defeat"
+	case 252490:
+		return "rust"
+	case 346110:
+		return "ark-survival-evolved"
+	case 222880:
+		return "insurgency"
+	case 108600:
+		return "project-zomboid"
+	case 526870:
+		return "satisfactory"
+	case 251570:
+		return "7-days-to-die"
+	case 892970:
+		return "valheim"
+	case 107410:
+		return "arma-3"
+	case 221100:
+		return "dayz"
+	case 489940:
+		return "battalion-1944"
+	}
+	
+	return ""
+}
+

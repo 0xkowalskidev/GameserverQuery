@@ -31,6 +31,9 @@ type Protocol interface {
 
 	// Games returns all games supported by this protocol with their configurations
 	Games() []GameConfig
+	
+	// DetectGame analyzes server response data to determine the specific game
+	DetectGame(info *ServerInfo) string
 }
 
 // ServerInfo represents information about a game server

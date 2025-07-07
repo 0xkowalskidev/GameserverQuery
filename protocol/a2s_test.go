@@ -401,22 +401,22 @@ func TestA2SProtocol_GameDetection(t *testing.T) {
 			expectedGame: "counter-strike",
 		},
 		{
-			name:        "Counter-Strike 2 by description",
+			name:        "Counter-Strike 2 by description (no App ID)",
 			gameDesc:    "Counter-Strike 2",
 			appID:       0,
-			expectedGame: "counter-strike-2",
+			expectedGame: "a2s",
 		},
 		{
-			name:        "Rust by description",
+			name:        "Rust by description (no App ID)",
 			gameDesc:    "Rust",
-			appID:       0, // Rust's actual AppID exceeds uint16
-			expectedGame: "rust",
+			appID:       0, // No App ID provided
+			expectedGame: "a2s",
 		},
 		{
-			name:        "Garry's Mod variant spelling",
+			name:        "Garry's Mod variant spelling (no App ID)",
 			gameDesc:    "GarrysMod",
 			appID:       0,
-			expectedGame: "garrys-mod",
+			expectedGame: "a2s",
 		},
 		{
 			name:        "Unknown game",
@@ -437,8 +437,9 @@ func TestA2SProtocol_GameDetection(t *testing.T) {
 				},
 			}
 			
-			// Use the centralized game detector
-			result := DetectGameFromResponse(info, "a2s")
+			// Use the protocol-specific game detector
+			protocol := &A2SProtocol{}
+			result := protocol.DetectGame(info)
 			assert.Equal(t, tt.expectedGame, result)
 		})
 	}

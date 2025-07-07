@@ -51,14 +51,99 @@ type QueryResult struct {
 	Error   error
 }
 
-// PortDiscoveryStrategy defines how ports should be discovered
-type PortDiscoveryStrategy interface {
-	GetPorts(ctx context.Context, host string, options *protocol.Options) ([]int, error)
+// Simplified port and protocol discovery functions replace strategy patterns
+
+// getSingleProtocolPorts returns ports to try for a single protocol query
+func getSingleProtocolPorts(proto protocol.Protocol, specifiedPort int) []int {
+	// Determine the main port to try
+	mainPort := specifiedPort
+	if mainPort == 0 {
+		mainPort = proto.DefaultPort()
+	}
+	
+	ports := []int{mainPort}
+	
+	// Add adjacent ports for discovery
+	const adjacentPortRange = 3
+	for offset := 1; offset <= adjacentPortRange; offset++ {
+		// Try port + offset
+		if testPort := mainPort + offset; testPort <= 65535 {
+			ports = append(ports, testPort)
+		}
+		// Try port - offset
+		if testPort := mainPort - offset; testPort >= 1024 {
+			ports = append(ports, testPort)
+		}
+	}
+	
+	return ports
 }
 
-// ProtocolSelectionStrategy defines how protocols should be selected
-type ProtocolSelectionStrategy interface {
-	GetProtocols(port int) []protocol.Protocol
+// getDiscoveryPorts returns common game server ports for discovery
+func getDiscoveryPorts(ctx context.Context, host string, options *protocol.Options) []int {
+	// Collect unique ports from all game configurations
+	portMap := make(map[int]bool)
+	for _, proto := range protocol.AllProtocols() {
+		// Add the default protocol ports
+		portMap[proto.DefaultQueryPort()] = true
+		portMap[proto.DefaultPort()] = true
+		
+		// Add ports from all game configurations
+		for _, game := range proto.Games() {
+			portMap[game.QueryPort] = true
+			portMap[game.GamePort] = true
+		}
+	}
+	
+	var ports []int
+	for port := range portMap {
+		ports = append(ports, port)
+	}
+	
+	if options.Debug {
+		debugLogf("Discovery", "Using %d common game ports for discovery", len(ports))
+	}
+	
+	return ports
+}
+
+// getProtocolsForPort returns protocols ordered by likelihood for the given port
+func getProtocolsForPort(port int) []protocol.Protocol {
+	allProtocols := protocol.AllProtocols()
+	ordered := make([]protocol.Protocol, 0, len(allProtocols))
+	remaining := make([]protocol.Protocol, 0, len(allProtocols))
+	seen := make(map[string]bool)
+	
+	// First, try protocols that have games matching this port
+	for _, proto := range allProtocols {
+		if seen[proto.Name()] {
+			continue
+		}
+		
+		// Check if any game config matches this port
+		hasMatch := false
+		if proto.DefaultQueryPort() == port || proto.DefaultPort() == port {
+			hasMatch = true
+		} else {
+			for _, game := range proto.Games() {
+				if game.QueryPort == port || game.GamePort == port {
+					hasMatch = true
+					break
+				}
+			}
+		}
+		
+		if hasMatch {
+			ordered = append(ordered, proto)
+			seen[proto.Name()] = true
+		} else {
+			remaining = append(remaining, proto)
+		}
+	}
+	
+	// Then try remaining protocols
+	ordered = append(ordered, remaining...)
+	return ordered
 }
 
 // SinglePortStrategy discovers ports for a single protocol query
@@ -358,8 +443,7 @@ func (e *QueryEngine) tryProtocolsOnPort(ctx context.Context, host string, reque
 	}
 	
 	// Get protocols in order of likelihood for this port
-	strategy := &AutoDetectProtocolStrategy{}
-	protocolsToTry := strategy.GetProtocols(queryPort)
+	protocolsToTry := getProtocolsForPort(queryPort)
 	
 	// Try each protocol until one succeeds
 	for _, proto := range protocolsToTry {
@@ -490,16 +574,8 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 		debugLogf("Query", "Parsed address - host: %s, requested port: %d, protocol: %s", host, requestedPort, proto.Name())
 	}
 
-	// Create port discovery strategy
-	strategy := &SinglePortStrategy{
-		Protocol:      proto,
-		SpecifiedPort: requestedPort,
-	}
-	
-	ports, err := strategy.GetPorts(ctx, host, req.Options)
-	if err != nil {
-		return &QueryResult{Error: err}
-	}
+	// Get ports to try for single protocol query
+	ports := getSingleProtocolPorts(proto, requestedPort)
 
 	// Try the specified port first with shorter timeout since we have adjacent ports as backup
 	if req.Options.Debug {
@@ -744,28 +820,26 @@ func (e *QueryEngine) executeDiscoveryQuery(ctx context.Context, req *QueryReque
 		debugLogf("Discovery", "Parsed address - host: %s, port: %d", host, specifiedPort)
 	}
 
-	// Create port discovery strategy
-	strategy := &DiscoveryPortStrategy{
-		SpecifiedPort: specifiedPort,
-		PortRange:     req.Options.PortRange,
-	}
-	
-	if req.Options.Debug {
-		if len(req.Options.PortRange) > 0 {
+	// Get ports to scan for discovery
+	var portsToScan []int
+	if len(req.Options.PortRange) > 0 {
+		// Use custom port range
+		portsToScan = req.Options.PortRange
+		if req.Options.Debug {
 			debugLogf("Discovery", "Using custom port range: %v", req.Options.PortRange)
-		} else if specifiedPort != 0 {
+		}
+	} else if specifiedPort != 0 {
+		// Use specified port
+		portsToScan = []int{specifiedPort}
+		if req.Options.Debug {
 			debugLogf("Discovery", "Using specified port: %d", specifiedPort)
-		} else {
+		}
+	} else {
+		// Use dynamic discovery
+		portsToScan = getDiscoveryPorts(ctx, host, req.Options)
+		if req.Options.Debug {
 			debugLog("Discovery", "Using dynamic port discovery")
 		}
-	}
-	
-	portsToScan, err := strategy.GetPorts(ctx, host, req.Options)
-	if err != nil {
-		if req.Options.Debug {
-			debugLogf("Discovery", "Port discovery failed: %v", err)
-		}
-		return &QueryResult{Error: err}
 	}
 	
 	if req.Options.Debug {
