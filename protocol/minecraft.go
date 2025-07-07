@@ -33,6 +33,12 @@ func (m *MinecraftProtocol) DefaultQueryPort() int {
 	return 25565
 }
 
+func (m *MinecraftProtocol) Games() []GameConfig {
+	return []GameConfig{
+		{Name: "minecraft", GamePort: 25565, QueryPort: 25565},
+	}
+}
+
 func (m *MinecraftProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	if opts.Debug {
 		debugLogf("Minecraft", "Starting query for %s", addr)

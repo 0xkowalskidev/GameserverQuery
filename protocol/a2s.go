@@ -9,46 +9,55 @@ import (
 	"time"
 )
 
-// SourceProtocol implements the Source A2S_INFO protocol
-type SourceProtocol struct{}
+// A2SProtocol implements the A2S_INFO protocol
+type A2SProtocol struct{}
 
 func init() {
-	registry.Register(&SourceProtocol{})
-
-	// Register game aliases (slugified game names)
-	registry.RegisterAlias("counter-strike-2", "source")
-	registry.RegisterAlias("counter-strike", "source") // CS:GO is "Counter-Strike"
-	registry.RegisterAlias("counter-source", "source")
-	registry.RegisterAlias("garrys-mod", "source")
-	registry.RegisterAlias("team-fortress-2", "source")
-	registry.RegisterAlias("left-4-dead", "source")
-	registry.RegisterAlias("left-4-dead-2", "source")
-	registry.RegisterAlias("half-life", "source")
-	registry.RegisterAlias("insurgency", "source")
-	registry.RegisterAlias("day-of-defeat", "source")
-	registry.RegisterAlias("project-zomboid", "source")
-	registry.RegisterAlias("satisfactory", "source")
-	registry.RegisterAlias("7-days-to-die", "source")
-	registry.RegisterAlias("arma-3", "source")
-	registry.RegisterAlias("dayz", "source")
-	registry.RegisterAlias("battalion-1944", "source")
+	registry.Register(&A2SProtocol{})
 }
 
-func (s *SourceProtocol) Name() string {
-	return "source"
+func (s *A2SProtocol) Name() string {
+	return "a2s"
 }
 
-func (s *SourceProtocol) DefaultPort() int {
+func (s *A2SProtocol) DefaultPort() int {
 	return 27015
 }
 
-func (s *SourceProtocol) DefaultQueryPort() int {
+func (s *A2SProtocol) DefaultQueryPort() int {
 	return 27015
 }
 
-func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
+func (s *A2SProtocol) Games() []GameConfig {
+	return []GameConfig{
+		// Standard A2S games using 27015
+		{Name: "counter-strike-2", GamePort: 27015, QueryPort: 27015},
+		{Name: "counter-strike", GamePort: 27015, QueryPort: 27015},
+		{Name: "counter-source", GamePort: 27015, QueryPort: 27015},
+		{Name: "garrys-mod", GamePort: 27015, QueryPort: 27015},
+		{Name: "team-fortress-2", GamePort: 27015, QueryPort: 27015},
+		{Name: "left-4-dead", GamePort: 27015, QueryPort: 27015},
+		{Name: "left-4-dead-2", GamePort: 27015, QueryPort: 27015},
+		{Name: "half-life", GamePort: 27015, QueryPort: 27015},
+		{Name: "insurgency", GamePort: 27015, QueryPort: 27015},
+		{Name: "day-of-defeat", GamePort: 27015, QueryPort: 27015},
+		{Name: "project-zomboid", GamePort: 16261, QueryPort: 16261},
+		{Name: "satisfactory", GamePort: 7777, QueryPort: 15777},
+		{Name: "7-days-to-die", GamePort: 26900, QueryPort: 26900},
+		{Name: "arma-3", GamePort: 2302, QueryPort: 2303},
+		{Name: "dayz", GamePort: 2302, QueryPort: 27016},
+		{Name: "battalion-1944", GamePort: 7777, QueryPort: 7777},
+
+		// Games with non standard ports
+		{Name: "rust", GamePort: 28015, QueryPort: 28015},
+		{Name: "valheim", GamePort: 2456, QueryPort: 2457},
+		{Name: "ark-survival-evolved", GamePort: 7777, QueryPort: 27015},
+	}
+}
+
+func (s *A2SProtocol) Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error) {
 	if opts.Debug {
-		debugLogf("Source", "Starting query for %s", addr)
+		debugLogf("A2S", "Starting query for %s", addr)
 	}
 
 	conn, err := setupConnection(ctx, "udp", addr, opts)
@@ -62,16 +71,16 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	request = append(request, []byte("Source Engine Query\x00")...)
 
 	if opts.Debug {
-		debugLogf("Source", "Sending A2S_INFO request (%d bytes)", len(request))
+		debugLogf("A2S", "Sending A2S_INFO request (%d bytes)", len(request))
 	}
 
 	// Measure ping from request send to response receive
 	pingStart := time.Now()
-	
+
 	// Send request
 	if _, err := conn.Write(request); err != nil {
 		if opts.Debug {
-			debugLogf("Source", "Request write failed: %v", err)
+			debugLogf("A2S", "Request write failed: %v", err)
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("write failed: %w", err)
 	}
@@ -81,21 +90,21 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	n, err := conn.Read(response)
 	pingDuration := time.Since(pingStart)
 	ping := int(math.Ceil(float64(pingDuration.Nanoseconds()) / 1e6))
-	
+
 	if err != nil {
 		if opts.Debug {
-			debugLogf("Source", "Response read failed: %v", err)
+			debugLogf("A2S", "Response read failed: %v", err)
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("read failed: %w", err)
 	}
 
 	if opts.Debug {
-		debugLogf("Source", "Received %d bytes response (ping: %dms)", n, ping)
+		debugLogf("A2S", "Received %d bytes response (ping: %dms)", n, ping)
 	}
 
 	if n < 5 {
 		if opts.Debug {
-			debugLogf("Source", "Response too short (%d bytes)", n)
+			debugLogf("A2S", "Response too short (%d bytes)", n)
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("response too short")
 	}
@@ -103,14 +112,14 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	// Check for challenge response
 	if response[4] == 0x41 { // Challenge response
 		if opts.Debug {
-			debugLog("Source", "Received challenge response")
+			debugLog("A2S", "Received challenge response")
 		}
 		if n < 9 {
 			return &ServerInfo{Online: false}, fmt.Errorf("challenge response too short")
 		}
 		challenge := binary.LittleEndian.Uint32(response[5:9])
 		if opts.Debug {
-			debugLogf("Source", "Challenge value: 0x%08x", challenge)
+			debugLogf("A2S", "Challenge value: 0x%08x", challenge)
 		}
 		return s.queryWithChallenge(conn, addr, challenge, getTimeout(opts), ping, opts)
 	}
@@ -118,20 +127,20 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	// Check for A2S_INFO response
 	if response[4] != 0x49 {
 		if opts.Debug {
-			debugLogf("Source", "Unexpected response type: 0x%02x (expected 0x49)", response[4])
+			debugLogf("A2S", "Unexpected response type: 0x%02x (expected 0x49)", response[4])
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("unexpected response type: %02x", response[4])
 	}
 
 	if opts.Debug {
-		debugLog("Source", "Parsing A2S_INFO response")
+		debugLog("A2S", "Parsing A2S_INFO response")
 	}
 
 	// Parse A2S_INFO response
 	info, err := s.parseA2SInfoResponse(response[5:n])
 	if err != nil {
 		if opts.Debug {
-			debugLogf("Source", "Response parsing failed: %v", err)
+			debugLogf("A2S", "Response parsing failed: %v", err)
 		}
 		return &ServerInfo{Online: false}, fmt.Errorf("parse failed: %w", err)
 	}
@@ -154,43 +163,43 @@ func (s *SourceProtocol) Query(ctx context.Context, addr string, opts *Options) 
 	}
 
 	if opts.Debug {
-		debugLogf("Source", "Parsed server info - Name: '%s', Game: '%s', Map: '%s', Players: %d/%d",
+		debugLogf("A2S", "Parsed server info - Name: '%s', Game: '%s', Map: '%s', Players: %d/%d",
 			result.Name, info.Game, result.Map, result.Players.Current, result.Players.Max)
 	}
 
 	// Use central game detector to set the game field
-	result.Game = DetectGameFromResponse(result, "source")
+	result.Game = DetectGameFromResponse(result, "a2s")
 
 	if opts.Debug {
-		debugLogf("Source", "Detected game type: '%s'", result.Game)
+		debugLogf("A2S", "Detected game type: '%s'", result.Game)
 	}
 
 	// Query players if requested
 	if opts.Players {
 		if opts.Debug {
-			debugLog("Source", "Querying player list")
+			debugLog("A2S", "Querying player list")
 		}
 		players, err := s.queryPlayers(conn, addr, getTimeout(opts))
 		if err == nil {
 			result.Players.List = players
 			if opts.Debug {
-				debugLogf("Source", "Retrieved %d players", len(players))
+				debugLogf("A2S", "Retrieved %d players", len(players))
 			}
 		} else {
 			if opts.Debug {
-				debugLogf("Source", "Player query failed: %v", err)
+				debugLogf("A2S", "Player query failed: %v", err)
 			}
 			result.Players.List = make([]Player, 0)
 		}
 	}
 
 	if opts.Debug {
-		debugLog("Source", "Query completed successfully")
+		debugLog("A2S", "Query completed successfully")
 	}
 	return result, nil
 }
 
-func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challenge uint32, timeout time.Duration, initialPing int, opts *Options) (*ServerInfo, error) {
+func (s *A2SProtocol) queryWithChallenge(conn net.Conn, addr string, challenge uint32, timeout time.Duration, initialPing int, opts *Options) (*ServerInfo, error) {
 	// Build A2S_INFO request with challenge
 	request := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x54}
 	request = append(request, []byte("Source Engine Query\x00")...)
@@ -206,10 +215,10 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 	// Read response
 	response := make([]byte, 1400)
 	n, err := conn.Read(response)
-	
+
 	// Use the initial ping from the first request rather than measuring challenge exchange
 	ping := initialPing
-	
+
 	if err != nil {
 		return &ServerInfo{Online: false}, fmt.Errorf("read challenge response failed: %w", err)
 	}
@@ -242,7 +251,7 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 	}
 
 	// Use central game detector to set the game field
-	result.Game = DetectGameFromResponse(result, "source")
+	result.Game = DetectGameFromResponse(result, "a2s")
 
 	// Query players if requested
 	if opts.Players {
@@ -257,7 +266,7 @@ func (s *SourceProtocol) queryWithChallenge(conn net.Conn, addr string, challeng
 	return result, nil
 }
 
-func (s *SourceProtocol) queryPlayers(conn net.Conn, addr string, timeout time.Duration) ([]Player, error) {
+func (s *A2SProtocol) queryPlayers(conn net.Conn, addr string, timeout time.Duration) ([]Player, error) {
 	// A2S_PLAYER request
 	request := []byte{0xFF, 0xFF, 0xFF, 0xFF, 0x55}
 	challengeBytes := make([]byte, 4)
@@ -310,7 +319,7 @@ func (s *SourceProtocol) queryPlayers(conn net.Conn, addr string, timeout time.D
 	return s.parsePlayersResponse(response[5:n])
 }
 
-func (s *SourceProtocol) parseA2SInfoResponse(data []byte) (*A2SInfo, error) {
+func (s *A2SProtocol) parseA2SInfoResponse(data []byte) (*A2SInfo, error) {
 	if len(data) < 1 {
 		return nil, fmt.Errorf("data too short")
 	}
@@ -423,7 +432,7 @@ func (s *SourceProtocol) parseA2SInfoResponse(data []byte) (*A2SInfo, error) {
 	return info, nil
 }
 
-func (s *SourceProtocol) parsePlayersResponse(data []byte) ([]Player, error) {
+func (s *A2SProtocol) parsePlayersResponse(data []byte) ([]Player, error) {
 	if len(data) < 1 {
 		return nil, fmt.Errorf("data too short")
 	}
@@ -474,7 +483,7 @@ func (s *SourceProtocol) parsePlayersResponse(data []byte) ([]Player, error) {
 	return players, nil
 }
 
-func (s *SourceProtocol) readNullTerminatedString(data []byte, offset int) (string, int, error) {
+func (s *A2SProtocol) readNullTerminatedString(data []byte, offset int) (string, int, error) {
 	start := offset
 	for offset < len(data) && data[offset] != 0 {
 		offset++
@@ -504,4 +513,3 @@ type A2SInfo struct {
 	VAC         uint8
 	Version     string
 }
-

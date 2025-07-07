@@ -33,30 +33,30 @@ func createA2SInfo(name, mapName, folder, game, version string, appID uint16, pl
 	}
 }
 
-// mockSourceServer simulates a Source server for testing purposes.
-type mockSourceServer struct {
+// mockA2SServer simulates an A2S server for testing purposes.
+type mockA2SServer struct {
 	t                *testing.T
 	listener         net.PacketConn
 	infoResponse     A2SInfo
-	players          []sourcePlayer
+	players          []a2sPlayer
 	requireChallenge bool
 	challengeValue   uint32
 }
 
-type sourcePlayer struct {
+type a2sPlayer struct {
 	name     string
 	score    int32
 	duration float32
 }
 
-// newMockSourceServer creates and starts a new mock server.
-func newMockSourceServer(t *testing.T, infoResponse A2SInfo) *mockSourceServer {
+// newMockA2SServer creates and starts a new mock server.
+func newMockA2SServer(t *testing.T, infoResponse A2SInfo) *mockA2SServer {
 	l, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Failed to start mock server: %v", err)
 	}
 
-	server := &mockSourceServer{
+	server := &mockA2SServer{
 		t:              t,
 		listener:       l,
 		infoResponse:   infoResponse,
@@ -68,27 +68,27 @@ func newMockSourceServer(t *testing.T, infoResponse A2SInfo) *mockSourceServer {
 }
 
 // Addr returns the address of the mock server.
-func (s *mockSourceServer) Addr() string {
+func (s *mockA2SServer) Addr() string {
 	return s.listener.LocalAddr().String()
 }
 
 // Close stops the mock server.
-func (s *mockSourceServer) Close() {
+func (s *mockA2SServer) Close() {
 	s.listener.Close()
 }
 
 // setPlayers sets the player list for the mock server.
-func (s *mockSourceServer) setPlayers(players []sourcePlayer) {
+func (s *mockA2SServer) setPlayers(players []a2sPlayer) {
 	s.players = players
 }
 
 // setRequireChallenge configures whether the server requires challenge for A2S_INFO.
-func (s *mockSourceServer) setRequireChallenge(require bool) {
+func (s *mockA2SServer) setRequireChallenge(require bool) {
 	s.requireChallenge = require
 }
 
 // handleRequests processes incoming UDP packets.
-func (s *mockSourceServer) handleRequests() {
+func (s *mockA2SServer) handleRequests() {
 	buffer := make([]byte, 1400)
 	for {
 		n, addr, err := s.listener.ReadFrom(buffer)
@@ -100,12 +100,12 @@ func (s *mockSourceServer) handleRequests() {
 }
 
 // handlePacket processes a single packet.
-func (s *mockSourceServer) handlePacket(data []byte, addr net.Addr) {
+func (s *mockA2SServer) handlePacket(data []byte, addr net.Addr) {
 	if len(data) < 5 {
 		return
 	}
 
-	// Check for Source header
+	// Check for A2S header
 	if data[0] != 0xFF || data[1] != 0xFF || data[2] != 0xFF || data[3] != 0xFF {
 		return
 	}
@@ -122,7 +122,7 @@ func (s *mockSourceServer) handlePacket(data []byte, addr net.Addr) {
 }
 
 // handleInfoRequest handles A2S_INFO requests.
-func (s *mockSourceServer) handleInfoRequest(data []byte, addr net.Addr) {
+func (s *mockA2SServer) handleInfoRequest(data []byte, addr net.Addr) {
 	// Check if challenge is present and required
 	if s.requireChallenge && len(data) < 24 {
 		// Send challenge response
@@ -188,7 +188,7 @@ func (s *mockSourceServer) handleInfoRequest(data []byte, addr net.Addr) {
 }
 
 // handlePlayerRequest handles A2S_PLAYER requests.
-func (s *mockSourceServer) handlePlayerRequest(data []byte, addr net.Addr) {
+func (s *mockA2SServer) handlePlayerRequest(data []byte, addr net.Addr) {
 	if len(data) < 9 {
 		return
 	}
@@ -225,7 +225,7 @@ func (s *mockSourceServer) handlePlayerRequest(data []byte, addr net.Addr) {
 	s.listener.WriteTo(response.Bytes(), addr)
 }
 
-func TestSourceProtocol_Query(t *testing.T) {
+func TestA2SProtocol_Query(t *testing.T) {
 	// 1. Setup mock server with a CS:GO response
 	mockResponse := createA2SInfo(
 		"Test CS:GO Server",
@@ -238,11 +238,11 @@ func TestSourceProtocol_Query(t *testing.T) {
 		32,
 	)
 
-	server := newMockSourceServer(t, mockResponse)
+	server := newMockA2SServer(t, mockResponse)
 	defer server.Close()
 
 	// 2. Query the mock server
-	protocol := &SourceProtocol{}
+	protocol := &A2SProtocol{}
 	opts := &Options{
 		Timeout: 5 * time.Second,
 		Players: false,
@@ -251,7 +251,7 @@ func TestSourceProtocol_Query(t *testing.T) {
 
 	// 3. Assert all returned fields
 	assert.NoError(t, err)
-	assertSourceServerInfo(t, info, expectedSourceServerInfo{
+	assertA2SServerInfo(t, info, expectedA2SServerInfo{
 		online:         true,
 		name:           "Test CS:GO Server",
 		game:           "counter-strike",
@@ -262,7 +262,7 @@ func TestSourceProtocol_Query(t *testing.T) {
 	})
 }
 
-func TestSourceProtocol_Query_WithChallenge(t *testing.T) {
+func TestA2SProtocol_Query_WithChallenge(t *testing.T) {
 	// 1. Setup mock server that requires challenge
 	mockResponse := createA2SInfo(
 		"Challenged Server",
@@ -275,12 +275,12 @@ func TestSourceProtocol_Query_WithChallenge(t *testing.T) {
 		50,
 	)
 
-	server := newMockSourceServer(t, mockResponse)
+	server := newMockA2SServer(t, mockResponse)
 	server.setRequireChallenge(true)
 	defer server.Close()
 
 	// 2. Query the mock server
-	protocol := &SourceProtocol{}
+	protocol := &A2SProtocol{}
 	opts := &Options{
 		Timeout: 5 * time.Second,
 	}
@@ -288,7 +288,7 @@ func TestSourceProtocol_Query_WithChallenge(t *testing.T) {
 
 	// 3. Assert the results
 	assert.NoError(t, err)
-	assertSourceServerInfo(t, info, expectedSourceServerInfo{
+	assertA2SServerInfo(t, info, expectedA2SServerInfo{
 		online:         true,
 		name:           "Challenged Server",
 		game:           "garrys-mod",
@@ -299,7 +299,7 @@ func TestSourceProtocol_Query_WithChallenge(t *testing.T) {
 	})
 }
 
-func TestSourceProtocol_Query_WithPlayers(t *testing.T) {
+func TestA2SProtocol_Query_WithPlayers(t *testing.T) {
 	// 1. Setup mock server with players
 	mockResponse := createA2SInfo(
 		"TF2 Server",
@@ -312,8 +312,8 @@ func TestSourceProtocol_Query_WithPlayers(t *testing.T) {
 		32,
 	)
 
-	server := newMockSourceServer(t, mockResponse)
-	server.setPlayers([]sourcePlayer{
+	server := newMockA2SServer(t, mockResponse)
+	server.setPlayers([]a2sPlayer{
 		{name: "Player1", score: 100, duration: 3600},
 		{name: "Player2", score: 50, duration: 1800},
 		{name: "Player3", score: 75, duration: 900},
@@ -321,7 +321,7 @@ func TestSourceProtocol_Query_WithPlayers(t *testing.T) {
 	defer server.Close()
 
 	// 2. Query the mock server with players enabled
-	protocol := &SourceProtocol{}
+	protocol := &A2SProtocol{}
 	opts := &Options{
 		Timeout: 5 * time.Second,
 		Players: true,
@@ -330,7 +330,7 @@ func TestSourceProtocol_Query_WithPlayers(t *testing.T) {
 
 	// 3. Assert the results
 	assert.NoError(t, err)
-	assertSourceServerInfo(t, info, expectedSourceServerInfo{
+	assertA2SServerInfo(t, info, expectedA2SServerInfo{
 		online:         true,
 		name:           "TF2 Server",
 		game:           "team-fortress-2",
@@ -348,7 +348,7 @@ func TestSourceProtocol_Query_WithPlayers(t *testing.T) {
 	})
 }
 
-func TestSourceProtocol_Query_EmptyPlayerList(t *testing.T) {
+func TestA2SProtocol_Query_EmptyPlayerList(t *testing.T) {
 	// 1. Setup mock server with no players
 	mockResponse := createA2SInfo(
 		"Empty Server",
@@ -361,12 +361,12 @@ func TestSourceProtocol_Query_EmptyPlayerList(t *testing.T) {
 		16,
 	)
 
-	server := newMockSourceServer(t, mockResponse)
-	server.setPlayers([]sourcePlayer{})
+	server := newMockA2SServer(t, mockResponse)
+	server.setPlayers([]a2sPlayer{})
 	defer server.Close()
 
 	// 2. Query the mock server with players enabled
-	protocol := &SourceProtocol{}
+	protocol := &A2SProtocol{}
 	opts := &Options{
 		Timeout: 5 * time.Second,
 		Players: true,
@@ -375,7 +375,7 @@ func TestSourceProtocol_Query_EmptyPlayerList(t *testing.T) {
 
 	// 3. Assert the results
 	assert.NoError(t, err)
-	assertSourceServerInfo(t, info, expectedSourceServerInfo{
+	assertA2SServerInfo(t, info, expectedA2SServerInfo{
 		online:         true,
 		name:           "Empty Server",
 		game:           "half-life",
@@ -387,7 +387,7 @@ func TestSourceProtocol_Query_EmptyPlayerList(t *testing.T) {
 	})
 }
 
-func TestSourceProtocol_GameDetection(t *testing.T) {
+func TestA2SProtocol_GameDetection(t *testing.T) {
 	tests := []struct {
 		name        string
 		gameDesc    string
@@ -422,7 +422,7 @@ func TestSourceProtocol_GameDetection(t *testing.T) {
 			name:        "Unknown game",
 			gameDesc:    "Some Unknown Game",
 			appID:       0,
-			expectedGame: "source",
+			expectedGame: "a2s",
 		},
 	}
 	
@@ -438,14 +438,14 @@ func TestSourceProtocol_GameDetection(t *testing.T) {
 			}
 			
 			// Use the centralized game detector
-			result := DetectGameFromResponse(info, "source")
+			result := DetectGameFromResponse(info, "a2s")
 			assert.Equal(t, tt.expectedGame, result)
 		})
 	}
 }
 
 // Helper struct for expected server info values
-type expectedSourceServerInfo struct {
+type expectedA2SServerInfo struct {
 	online          bool
 	name            string
 	game            string
@@ -458,8 +458,8 @@ type expectedSourceServerInfo struct {
 	playerDurations []time.Duration
 }
 
-// assertSourceServerInfo validates all ServerInfo fields
-func assertSourceServerInfo(t *testing.T, info *ServerInfo, expected expectedSourceServerInfo) {
+// assertA2SServerInfo validates all ServerInfo fields
+func assertA2SServerInfo(t *testing.T, info *ServerInfo, expected expectedA2SServerInfo) {
 	assert.NotNil(t, info, "ServerInfo should not be nil")
 	
 	// Basic fields
@@ -469,7 +469,7 @@ func assertSourceServerInfo(t *testing.T, info *ServerInfo, expected expectedSou
 	assert.Equal(t, expected.map_, info.Map)
 	assert.Equal(t, expected.version, info.Version)
 	
-	// Fields not set by Source protocol
+	// Fields not set by A2S protocol
 	assert.Empty(t, info.Address, "Address not set by protocol")
 	assert.Zero(t, info.Port, "Port not set by protocol")
 	assert.GreaterOrEqual(t, info.Ping, 0, "Ping should be non-negative")

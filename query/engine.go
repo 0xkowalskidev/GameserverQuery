@@ -105,12 +105,18 @@ func (s *AutoDetectPortStrategy) GetPorts(ctx context.Context, host string, opti
 		return []int{s.SpecifiedPort}, nil
 	}
 	
-	// Get default query ports for all protocols (prioritize query ports for discovery)
+	// Get unique ports from all game configurations
 	portMap := make(map[int]bool)
 	for _, proto := range protocol.AllProtocols() {
+		// Add the default protocol ports
 		portMap[proto.DefaultQueryPort()] = true
-		// Also include game ports for comprehensive discovery
 		portMap[proto.DefaultPort()] = true
+		
+		// Add ports from all game configurations
+		for _, game := range proto.Games() {
+			portMap[game.QueryPort] = true
+			portMap[game.GamePort] = true
+		}
 	}
 	
 	var ports []int
@@ -295,13 +301,30 @@ func (s *AutoDetectProtocolStrategy) GetProtocols(port int) []protocol.Protocol 
 	allProtocols := protocol.AllProtocols()
 	ordered := make([]protocol.Protocol, 0, len(allProtocols))
 	remaining := make([]protocol.Protocol, 0, len(allProtocols))
+	seen := make(map[string]bool)
 	
-	// First, try protocols that match this port's default query port, then game port
+	// First, try protocols that have games matching this port
 	for _, proto := range allProtocols {
-		if proto.DefaultQueryPort() == port {
+		if seen[proto.Name()] {
+			continue
+		}
+		
+		// Check if any game config matches this port
+		hasMatch := false
+		if proto.DefaultQueryPort() == port || proto.DefaultPort() == port {
+			hasMatch = true
+		} else {
+			for _, game := range proto.Games() {
+				if game.QueryPort == port || game.GamePort == port {
+					hasMatch = true
+					break
+				}
+			}
+		}
+		
+		if hasMatch {
 			ordered = append(ordered, proto)
-		} else if proto.DefaultPort() == port {
-			ordered = append(ordered, proto)
+			seen[proto.Name()] = true
 		} else {
 			remaining = append(remaining, proto)
 		}
@@ -445,16 +468,17 @@ func (e *QueryEngine) executeSingleQuery(ctx context.Context, req *QueryRequest)
 		debugLogf("Query", "Starting single query for game '%s' at address '%s'", req.Game, req.Address)
 	}
 	
-	proto, exists := protocol.GetProtocol(req.Game)
+	// Get game config and protocol
+	gameConfig, proto, exists := protocol.GetGameConfigFromRegistry(req.Game)
 	if !exists {
 		if req.Options.Debug {
-			debugLogf("Query", "Unsupported game protocol: %s", req.Game)
+			debugLogf("Query", "Unsupported game: %s", req.Game)
 		}
 		return &QueryResult{Error: fmt.Errorf("unsupported game: %s", req.Game)}
 	}
 
-	// Parse address and determine port - use query port by default since we're querying
-	host, requestedPort, err := parseAddress(req.Address, req.Options.Port, proto.DefaultQueryPort())
+	// Parse address and determine port - use game's query port by default
+	host, requestedPort, err := parseAddress(req.Address, req.Options.Port, gameConfig.QueryPort)
 	if err != nil {
 		if req.Options.Debug {
 			debugLogf("Query", "Address parsing failed: %v", err)
@@ -677,9 +701,9 @@ func (e *QueryEngine) getProtocolsByPopularity() []protocol.Protocol {
 	// Ordered by general popularity and likelihood of being found
 	popularityOrder := []string{
 		"minecraft",    // Very common
-		"source",       // Covers many Steam games
+		"a2s",          // Covers many Steam games
 		"terraria",     // Popular indie game
-		"rust",         // Popular but uses source protocol
+		"rust",         // Popular but uses a2s protocol
 	}
 	
 	var result []protocol.Protocol

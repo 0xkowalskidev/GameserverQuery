@@ -20,8 +20,8 @@ func (gd *GameDetector) DetectGame(info *ServerInfo, protocolName string) string
 		return gd.detectMinecraft(info)
 	case "terraria":
 		return gd.detectTerraria(info)
-	case "source", "rust":
-		return gd.detectSourceGame(info)
+	case "a2s":
+		return gd.detectA2SGame(info)
 	default:
 		return protocolName
 	}
@@ -40,8 +40,8 @@ func (gd *GameDetector) detectTerraria(info *ServerInfo) string {
 	return "terraria"
 }
 
-// detectSourceGame handles Source engine game detection
-func (gd *GameDetector) detectSourceGame(info *ServerInfo) string {
+// detectA2SGame handles A2S protocol game detection
+func (gd *GameDetector) detectA2SGame(info *ServerInfo) string {
 	// Extract game description and App ID from Extra data if available
 	gameDesc := ""
 	appIDStr := ""
@@ -84,7 +84,7 @@ func (gd *GameDetector) detectByAppID(appIDStr string) string {
 	case 730:
 		return "counter-strike"
 	case 240:
-		return "counter-source"
+		return "counter-strike"
 	case 4000:
 		return "garrys-mod"
 	case 440:
@@ -96,7 +96,7 @@ func (gd *GameDetector) detectByAppID(appIDStr string) string {
 	case 320:
 		return "half-life"
 	case 300:
-		return "day-of-defeat-source"
+		return "day-of-defeat"
 	case 252490:
 		return "rust"
 	case 346110:
@@ -125,7 +125,7 @@ func (gd *GameDetector) detectByAppID(appIDStr string) string {
 // analyzeGameDescription determines game type from description/name
 func (gd *GameDetector) analyzeGameDescription(gameDesc string) string {
 	if gameDesc == "" {
-		return "source"
+		return "a2s"
 	}
 	
 	gameLower := strings.ToLower(gameDesc)
@@ -171,8 +171,8 @@ func (gd *GameDetector) analyzeGameDescription(gameDesc string) string {
 		return "half-life"
 	}
 	
-	// Default to generic source
-	return "source"
+	// Default to generic a2s
+	return "a2s"
 }
 
 // Global detector instance

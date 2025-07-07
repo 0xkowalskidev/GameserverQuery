@@ -23,6 +23,7 @@ Games are sorted roughly by player count (highest priority first).
 - [x] 142.44.169.172:2302 ❓ WORKS (detected as "source", port 2302→2303)
 - [x] 51.79.37.206:2302 ❓ WORKS (detected as "source", port 2302→2303)
 - [x] 51.161.126.237:2302 ❓ WORKS (detected as "source", port 2302→2303)
+**NOTE**: Servers report App ID 0 instead of 107410, shows as "source" instead of "arma-3". Use -game arma-3
 
 ### Garry's Mod ✅ ALL WORK (Source engine)
 - [x] 64.52.81.251:27015 ✅ WORKS (correctly detected)
@@ -48,6 +49,7 @@ Games are sorted roughly by player count (highest priority first).
 - [x] 172.111.51.159:2302 ❌ FAILED
 - [x] 193.25.252.15:2302 ❌ FAILED
 - [x] 54.36.109.179:2302 ❓ WORKS (detected as "source", port 2302→2303)
+**NOTE**: Servers report App ID 0 instead of 221100, shows as "source" instead of "dayz". Use -game dayz
 
 ### Conan Exiles ❌ 1/1 FAILED (Should work - Unreal Engine with Source query)
 - [x] 66.45.229.134:7777 ❌ FAILED
@@ -174,6 +176,7 @@ Does not work as ark uses 7777 as default gameport, but 27015 as default query p
 - [x] 108.61.104.102:7787 ❓ WORKS (detected as "source", port 7787→7790)
 - [ ] 108.61.236.17:7777
 - [ ] 68.232.162.210:7777
+**NOTE**: Servers report App ID 0 instead of 489940, shows as "source" instead of "battalion-1944". Use -game battalion-1944
 
 ### Project Zomboid ✅ 1/1 WORKS!
 - [x] 81.16.176.147:16261 ✅ WORKS! (correctly detected)

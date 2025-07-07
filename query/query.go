@@ -28,16 +28,16 @@ func Query(ctx context.Context, game, addr string, opts ...Option) (*protocol.Se
 		Game:    game,
 		Options: options,
 	}
-	
+
 	result := engine.Execute(ctx, req)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	if len(result.Servers) == 0 {
 		return nil, fmt.Errorf("no responsive server found at %s", addr)
 	}
-	
+
 	return result.Servers[0], nil
 }
 
@@ -55,16 +55,16 @@ func AutoDetect(ctx context.Context, addr string, opts ...Option) (*protocol.Ser
 		Address: addr,
 		Options: options,
 	}
-	
+
 	result := engine.Execute(ctx, req)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	if len(result.Servers) == 0 {
 		return nil, fmt.Errorf("no responsive server found at %s", addr)
 	}
-	
+
 	return result.Servers[0], nil
 }
 
@@ -83,12 +83,12 @@ func DiscoverServers(ctx context.Context, addr string, opts ...Option) ([]*proto
 		Address: addr,
 		Options: options,
 	}
-	
+
 	result := engine.Execute(ctx, req)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return result.Servers, nil
 }
 
@@ -110,7 +110,7 @@ func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan 
 
 	// Use the unified QueryEngine with progress callback
 	engine := NewQueryEngine()
-	
+
 	// Create a callback function that forwards progress to the channel
 	progressCallback := func(progress ScanProgress) {
 		if progressChan != nil {
@@ -120,25 +120,25 @@ func DiscoverServersWithProgress(ctx context.Context, addr string, progressChan 
 			}
 		}
 	}
-	
+
 	req := &QueryRequest{
 		Type:             QueryTypeDiscovery,
 		Address:          addr,
 		Options:          options,
 		ProgressCallback: progressCallback,
 	}
-	
+
 	result := engine.Execute(ctx, req)
-	
+
 	// Close progress channel after all results are collected
 	if progressChan != nil {
 		close(progressChan)
 	}
-	
+
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	
+
 	return result.Servers, nil
 }
 
@@ -202,12 +202,12 @@ func parseAddress(addr string, optPort, defaultPort int) (string, int, error) {
 // DefaultOptions returns default query options
 func DefaultOptions() *protocol.Options {
 	return &protocol.Options{
-		Timeout: 5 * time.Second,
-		Port:    0, // Use protocol default
-		Players: false,
-		PortRange: nil,
+		Timeout:        5 * time.Second,
+		Port:           0, // Use protocol default
+		Players:        false,
+		PortRange:      nil,
 		MaxConcurrency: 0, // unlimited
-		DiscoveryMode: false,
+		DiscoveryMode:  false,
 	}
 }
 
@@ -263,6 +263,3 @@ func WithDebug() Option {
 		o.Debug = true
 	}
 }
-
-// Removed: Helper functions moved to QueryEngine
-

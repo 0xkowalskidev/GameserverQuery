@@ -8,12 +8,19 @@ import (
 	"time"
 )
 
+// GameConfig represents configuration for a specific game that uses this protocol
+type GameConfig struct {
+	Name      string // Game identifier (e.g., "rust", "cs2", "ark-survival-evolved")
+	GamePort  int    // Default port where players connect
+	QueryPort int    // Default port for status queries
+}
+
 // Protocol defines how to query a specific game server type
 type Protocol interface {
 	// Query attempts to get server information
 	Query(ctx context.Context, addr string, opts *Options) (*ServerInfo, error)
 
-	// Name returns the protocol name (e.g., "minecraft", "source")
+	// Name returns the protocol name (e.g., "minecraft", "a2s")
 	Name() string
 
 	// DefaultPort returns the default port for this protocol (where players connect)
@@ -21,6 +28,9 @@ type Protocol interface {
 
 	// DefaultQueryPort returns the default port for status queries
 	DefaultQueryPort() int
+
+	// Games returns all games supported by this protocol with their configurations
+	Games() []GameConfig
 }
 
 // ServerInfo represents information about a game server
@@ -78,6 +88,13 @@ var registry = &Registry{
 // Register adds a protocol to the global registry
 func (r *Registry) Register(protocol Protocol) {
 	r.protocols[protocol.Name()] = protocol
+	
+	// Auto-register game names as aliases
+	for _, game := range protocol.Games() {
+		if game.Name != "" && game.Name != protocol.Name() {
+			r.aliases[game.Name] = protocol.Name()
+		}
+	}
 }
 
 // RegisterAlias adds an alias for an existing protocol
@@ -98,6 +115,30 @@ func (r *Registry) Get(name string) (Protocol, bool) {
 	}
 
 	return nil, false
+}
+
+// GetGameConfig retrieves the game configuration for a specific game name
+func (r *Registry) GetGameConfig(gameName string) (*GameConfig, Protocol, bool) {
+	// Get the protocol (handles aliases)
+	protocol, exists := r.Get(gameName)
+	if !exists {
+		return nil, nil, false
+	}
+	
+	// Find the specific game config
+	for _, game := range protocol.Games() {
+		if game.Name == gameName {
+			return &game, protocol, true
+		}
+	}
+	
+	// If no specific game config found, return default
+	defaultConfig := &GameConfig{
+		Name:      protocol.Name(),
+		GamePort:  protocol.DefaultPort(),
+		QueryPort: protocol.DefaultQueryPort(),
+	}
+	return defaultConfig, protocol, true
 }
 
 // All returns all registered protocols
@@ -129,6 +170,11 @@ func (r *Registry) AllNames() []string {
 // GetProtocol retrieves a protocol by name from the global registry
 func GetProtocol(name string) (Protocol, bool) {
 	return registry.Get(name)
+}
+
+// GetGameConfigFromRegistry returns game configuration from the global registry
+func GetGameConfigFromRegistry(gameName string) (*GameConfig, Protocol, bool) {
+	return registry.GetGameConfig(gameName)
 }
 
 // AllProtocols returns all registered protocols from the global registry
